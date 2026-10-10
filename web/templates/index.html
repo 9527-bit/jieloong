@@ -322,6 +322,110 @@
       margin-top: 0.15rem;
     }
 
+    /* 顶部工作流横幅 */
+    .workflow-ribbon {
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid var(--card-border);
+      border-radius: 14px;
+      padding: 0.85rem 1.25rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+      font-size: 0.88rem;
+      color: var(--text-muted);
+    }
+    .ribbon-steps {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      flex-wrap: wrap;
+    }
+    .ribbon-step {
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+      color: #e2e8f0;
+      font-weight: 500;
+    }
+    .ribbon-step .num {
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      background: rgba(59, 130, 246, 0.2);
+      color: var(--primary);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.75rem;
+      font-weight: 700;
+    }
+
+    /* 收藏提示横幅 */
+    .favorite-notice-banner {
+      background: linear-gradient(135deg, rgba(245, 158, 11, 0.12), rgba(59, 130, 246, 0.08));
+      border: 1px solid rgba(245, 158, 11, 0.35);
+      border-radius: 14px;
+      padding: 1.15rem 1.4rem;
+      display: flex;
+      align-items: flex-start;
+      gap: 1.1rem;
+      margin-bottom: 1.35rem;
+      box-shadow: 0 4px 18px rgba(245, 158, 11, 0.08);
+    }
+    .notice-icon-box {
+      width: 40px;
+      height: 40px;
+      border-radius: 10px;
+      background: rgba(245, 158, 11, 0.2);
+      border: 1px solid rgba(245, 158, 11, 0.4);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.35rem;
+      flex-shrink: 0;
+    }
+    .notice-body { flex: 1; }
+    .notice-headline {
+      font-size: 1rem;
+      font-weight: 700;
+      color: #fde68a;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      margin-bottom: 0.35rem;
+    }
+    .notice-text {
+      font-size: 0.88rem;
+      color: #cbd5e1;
+      line-height: 1.55;
+    }
+    .notice-guide-steps {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      margin-top: 0.65rem;
+      flex-wrap: wrap;
+      font-size: 0.85rem;
+      background: rgba(0, 0, 0, 0.25);
+      padding: 0.6rem 0.9rem;
+      border-radius: 10px;
+      border: 1px solid rgba(255, 255, 255, 0.06);
+    }
+    .notice-guide-steps .step-item {
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
+    }
+    .notice-guide-steps .arrow {
+      color: #64748b;
+      font-size: 0.8rem;
+    }
+    .notice-guide-steps strong {
+      color: #fbbf24;
+    }
+
     /* Step 2: 收藏接龙列表网格 */
     .favorites-grid {
       display: grid;
@@ -614,6 +718,21 @@
 
   <main>
 
+    <!-- 顶部工作流概览 -->
+    <div class="workflow-ribbon">
+      <div class="ribbon-steps">
+        <span style="font-weight: 600; color: #94a3b8;">使用流程:</span>
+        <div class="ribbon-step"><span class="num">1</span> 微信扫码授权</div>
+        <span style="color: #475569;">➔</span>
+        <div class="ribbon-step"><span class="num">2</span> 微信中【★ 收藏】打卡接龙</div>
+        <span style="color: #475569;">➔</span>
+        <div class="ribbon-step"><span class="num">3</span> 勾选接龙并设置姓名坐标</div>
+        <span style="color: #475569;">➔</span>
+        <div class="ribbon-step"><span class="num">4</span> 每天自动定时打卡</div>
+      </div>
+      <div>⚡ 单用户自动化工作台</div>
+    </div>
+
     <!-- STEP 1: 微信扫码授权 -->
     <section class="step-card" id="step1Card">
       <div class="step-header">
@@ -676,6 +795,26 @@
           </div>
         </div>
         <button class="btn btn-outline btn-sm" onclick="loadFavorites(true)">🔄 刷新收藏列表</button>
+      </div>
+
+      <!-- 收藏提示横幅 -->
+      <div class="favorite-notice-banner">
+        <div class="notice-icon-box">⭐</div>
+        <div class="notice-body">
+          <div class="notice-headline">
+            <span>重要提醒：请先在微信「接龙管家」小程序中【★ 收藏】需要打卡的签到表单</span>
+          </div>
+          <div class="notice-text">
+            系统通过同步你的个人收藏夹 (<code>i.jielong.com/my-form?tab=5</code>) 读取接龙。若列表中未展示你要打卡的表单，请先在手机微信中操作：
+          </div>
+          <div class="notice-guide-steps">
+            <div class="step-item">📱 <strong>步骤 1：</strong> 在手机微信打开需要打卡的接龙（如群聊中的打卡接龙）</div>
+            <div class="arrow">➔</div>
+            <div class="step-item">⭐ <strong>步骤 2：</strong> 点击接龙详情页上的<strong>【★ 收藏】</strong>（或右上角菜单中的收藏）</div>
+            <div class="arrow">➔</div>
+            <div class="step-item">🔄 <strong>步骤 3：</strong> 返回本页面点击右上角<strong>【🔄 刷新收藏列表】</strong>，即可直接选择！</div>
+          </div>
+        </div>
       </div>
 
       <!-- 收藏列表网格 -->
@@ -966,9 +1105,16 @@
         currentFavorites = data.items || [];
         if (currentFavorites.length === 0) {
           container.innerHTML = `
-            <div style="background: rgba(255,255,255,0.02); border: 1px dashed var(--card-border); border-radius: 12px; padding: 1.5rem; text-align: center; color: var(--text-muted);">
-              <p>📭 暂未在接龙管家检测到收藏的接龙表单</p>
-              <p style="font-size: 0.85rem; margin-top: 0.5rem;">你可以在微信接龙中点击【收藏】，或在下方展开【手动输入接龙链接或ID】快速设定</p>
+            <div style="background: rgba(245, 158, 11, 0.05); border: 1px dashed rgba(245, 158, 11, 0.35); border-radius: 14px; padding: 2rem 1.5rem; text-align: center; color: #cbd5e1;">
+              <div style="font-size: 2.2rem; margin-bottom: 0.5rem;">⭐</div>
+              <p style="font-weight: 700; color: #fde68a; font-size: 1.1rem;">暂未在接龙管家检测到收藏的接龙表单</p>
+              <p style="font-size: 0.88rem; color: #94a3b8; margin: 0.6rem auto 1.25rem; max-width: 520px; line-height: 1.6;">
+                请在手机微信中打开你需要打卡的「接龙管家」小程序页面，点击右上角或底部的<strong>【★ 收藏】</strong>将其加入收藏夹，然后点击下方按钮刷新！
+              </p>
+              <div style="display: flex; justify-content: center; gap: 0.75rem; flex-wrap: wrap;">
+                <button class="btn btn-outline btn-sm" onclick="loadFavorites(true)">🔄 我已在微信收藏，点击刷新</button>
+                <button class="btn btn-outline btn-sm" onclick="toggleManualInput()">⌨️ 手动输入接龙链接</button>
+              </div>
             </div>
           `;
           return;
