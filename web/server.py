@@ -306,6 +306,8 @@ async def get_thread_detail(thread_id: Union[int, str]):
             if isinstance(raw_names, str) and raw_names.strip():
                 name_list = [n.strip() for n in re.split(r'[\r\n]+', raw_names) if n.strip()]
                 
+            pos_setting = thread.get("PositionSetting")
+            has_pos = thread.get("HasPositionSetting", False) or bool(pos_setting)
             return {
                 "success": True,
                 "thread_id": thread["ThreadId"],
@@ -313,7 +315,9 @@ async def get_thread_detail(thread_id: Union[int, str]):
                 "subject": thread.get("Subject", "未知接龙"),
                 "author": thread.get("Author", "未知发起人"),
                 "name_range": name_list,
-                "has_name_scope": thread.get("HasNameScope", False)
+                "has_name_scope": thread.get("HasNameScope", False),
+                "has_position_setting": has_pos,
+                "position_setting": pos_setting
             }
         else:
             raise HTTPException(status_code=404, detail="未找到该接龙或接龙已关闭")

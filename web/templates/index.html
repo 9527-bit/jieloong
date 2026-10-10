@@ -895,9 +895,10 @@
 
           <!-- 辅助定位按钮 -->
           <div class="form-group full-width">
+            <div id="positionNotice" style="display: none; background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 10px; padding: 0.75rem 1rem; margin-bottom: 0.5rem; font-size: 0.88rem; color: #a7f3d0;"></div>
             <div class="loc-helper-bar">
+              <button type="button" class="btn btn-outline btn-sm" id="btnApplyThreadPos" style="display: none;" onclick="applyThreadPosition()">🎯 填入接龙指定地点</button>
               <button type="button" class="btn btn-outline btn-sm" onclick="detectBrowserLocation()">📍 获取当前设备 GPS 定位</button>
-              <button type="button" class="btn btn-outline btn-sm" onclick="setPresetLocation('广州塔', 23.10647, 113.32446, '广东省广州市海珠区阅江西路222号')">🏢 示例坐标</button>
               <span id="locStatusText" style="color: var(--text-muted);"></span>
             </div>
           </div>
@@ -1201,12 +1202,44 @@
             rosterBlock.style.display = 'none';
           }
 
+          // 渲染指定参与地点信息
+          const posNotice = document.getElementById('positionNotice');
+          const btnApplyPos = document.getElementById('btnApplyThreadPos');
+          if (data.position_setting && data.position_setting.Detail) {
+            const pos = data.position_setting;
+            posNotice.style.display = 'block';
+            posNotice.innerHTML = `📍 <strong>发起人指定了参与地点：</strong>【${escapeHtml(pos.Detail)}】（允许打卡半径: ${pos.AllowRange || 2000} 米）`;
+            if (btnApplyPos) btnApplyPos.style.display = 'inline-flex';
+
+            // 自动为用户填入官方指定地点（如果未填或重新切换了接龙）
+            if (!document.getElementById('configLocationText').value.trim() || autoScrollToStep3) {
+              document.getElementById('configLocationText').value = pos.Detail;
+              document.getElementById('configLatitude').value = parseFloat(pos.Latitude).toFixed(6);
+              document.getElementById('configLongitude').value = parseFloat(pos.Longitude).toFixed(6);
+              showSaveTip(`已自动预填该接龙指定打卡地点: ${pos.Detail}`, '#34d399');
+            }
+          } else {
+            posNotice.style.display = 'none';
+            if (btnApplyPos) btnApplyPos.style.display = 'none';
+          }
+
           if (autoScrollToStep3) {
             document.getElementById('step3Card').scrollIntoView({ behavior: 'smooth' });
           }
         }
       } catch (e) {
         console.error('获取接龙详情失败:', e);
+      }
+    }
+
+    // 快捷填入该接龙官方指定地点
+    function applyThreadPosition() {
+      if (selectedThreadData && selectedThreadData.position_setting) {
+        const pos = selectedThreadData.position_setting;
+        document.getElementById('configLocationText').value = pos.Detail;
+        document.getElementById('configLatitude').value = parseFloat(pos.Latitude).toFixed(6);
+        document.getElementById('configLongitude').value = parseFloat(pos.Longitude).toFixed(6);
+        showSaveTip(`已恢复填入指定地点：${pos.Detail}`, '#34d399');
       }
     }
 
