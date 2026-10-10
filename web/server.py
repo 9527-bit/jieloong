@@ -8,6 +8,7 @@ import sys
 import threading
 import time
 from typing import Any, Dict, List, Optional, Union
+import uuid
 
 from fastapi import Body, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -71,58 +72,94 @@ app.add_middleware(
 
 TOKENS_DIR = "自动打卡/Tokens"
 os.makedirs(TOKENS_DIR, exist_ok=True)
-SESSION_TOKEN_FILE = os.path.join(TOKENS_DIR, ".session_token")
+SESSIONS_FILE = os.path.join(TOKENS_DIR, ".sessions.json")
+_sessions_lock = threading.Lock()
+_qr_session_map: Dict[str, str] = {}  # uuid -> sid
 
-# --- 辅助函数 ---
-def get_current_user_file() -> Optional[str]:
-    """获取当前有效用户配置文件（单用户模式下取唯一配置文件）"""
+# --- 会话持久化与用户隔离支持 ---
+def load_sessions() -> Dict[str, Dict[str, Any]]:
+    if not os.path.exists(SESSIONS_FILE):
+        return {}
+    try:
+        with open(SESSIONS_FILE, "r", encoding="utf-8") as fp:
+            return json.load(fp)
+    except Exception as e:
+        print(f"[Dashboard] 读取会话存储异常: {e}")
+        return {}
+
+def save_sessions(sessions: Dict[str, Dict[str, Any]]):
+    try:
+        with open(SESSIONS_FILE, "w", encoding="utf-8") as fp:
+            json.dump(sessions, fp, indent=2, ensure_ascii=False)
+    except Exception as e:
+        print(f"[Dashboard] 写入会话存储异常: {e}")
+
+def get_session_id(request: Request) -> str:
+    """提取客户端会话 ID（支持 Header、Cookie、Query Param）"""
+    sid = request.headers.get("x-session-id", "").strip()
+    if not sid:
+        sid = request.cookies.get("taskforge_sid", "").strip()
+    if not sid:
+        sid = request.query_params.get("sid", "").strip()
+    if not sid:
+        sid = "sid_" + uuid.uuid4().hex[:16]
+    return sid
+
+def get_session(sid: str) -> Dict[str, Any]:
+    if not sid:
+        return {}
+    with _sessions_lock:
+        sessions = load_sessions()
+        return sessions.get(sid, {})
+
+def update_session(sid: str, updates: Dict[str, Any]) -> Dict[str, Any]:
+    if not sid:
+        return {}
+    with _sessions_lock:
+        sessions = load_sessions()
+        sess = sessions.setdefault(sid, {
+            "token": "",
+            "user_name": "",
+            "created_at": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        })
+        sess.update(updates)
+        sess["updated_at"] = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        save_sessions(sessions)
+        return sess
+
+def get_all_user_names() -> List[str]:
+    """获取系统中所有已保存的用户配置名列表"""
     if not os.path.exists(TOKENS_DIR):
-        return None
-    files = [f for f in sorted(os.listdir(TOKENS_DIR)) if f.endswith(".json") and f != "example.json" and not f.startswith(".")]
-    if files:
-        return os.path.join(TOKENS_DIR, files[0])
+        return []
+    return sorted([
+        f[:-5] for f in os.listdir(TOKENS_DIR)
+        if f.endswith(".json") and f != "example.json" and not f.startswith(".")
+    ])
+
+def get_user_file_for_session(sess: Dict[str, Any]) -> Optional[str]:
+    """获取当前会话绑定的用户配置文件"""
+    user_name = (sess.get("user_name") or "").strip()
+    if user_name:
+        fpath = os.path.join(TOKENS_DIR, f"{user_name}.json")
+        if os.path.exists(fpath):
+            return fpath
     return None
 
-def get_active_token() -> str:
-    """获取当前可用的 Token（优先从配置文件中读取，其次从会话文件读取）"""
-    uf = get_current_user_file()
+def get_session_token(sess: Dict[str, Any]) -> str:
+    """获取当前会话有效的 Token（优先从用户配置文件同步，其次取会话保存的 Token）"""
+    uf = get_user_file_for_session(sess)
     if uf and os.path.exists(uf):
         try:
             with open(uf, "r", encoding="utf-8") as fp:
                 data = json.load(fp)
-                if data.get("Token"):
-                    return data["Token"].strip()
+                file_token = (data.get("Token") or "").strip()
+                if file_token:
+                    return file_token
         except Exception:
             pass
-    if os.path.exists(SESSION_TOKEN_FILE):
-        try:
-            with open(SESSION_TOKEN_FILE, "r", encoding="utf-8") as fp:
-                return fp.read().strip()
-        except Exception:
-            pass
-    return ""
+    return (sess.get("token") or "").strip()
 
-def save_active_token(token: str):
-    """保存或更新 Token 到会话文件以及已有用户配置文件中"""
-    token = token.strip()
-    try:
-        with open(SESSION_TOKEN_FILE, "w", encoding="utf-8") as fp:
-            fp.write(token)
-    except Exception as e:
-        print(f"[Dashboard] 写入会话 Token 失败: {e}")
-        
-    uf = get_current_user_file()
-    if uf and os.path.exists(uf):
-        try:
-            with open(uf, "r", encoding="utf-8") as fp:
-                data = json.load(fp)
-            data["Token"] = token
-            with open(uf, "w", encoding="utf-8") as fp:
-                json.dump(data, fp, indent=4, ensure_ascii=False)
-            print(f"[Dashboard] 已同步更新配置文件中的 Token: {os.path.basename(uf)}")
-        except Exception as e:
-            print(f"[Dashboard] 同步更新 Token 失败: {e}")
-
+# --- Pydantic 模型 ---
 class SingleUserConfigModel(BaseModel):
     name: str
     email: Optional[str] = ""
@@ -131,6 +168,9 @@ class SingleUserConfigModel(BaseModel):
     latitude: float
     longitude: float
     token: Optional[str] = ""
+
+class SwitchUserModel(BaseModel):
+    name: str
 
 # --- 页面路由 ---
 @app.api_route("/", methods=["GET", "HEAD"], response_class=HTMLResponse)
@@ -147,15 +187,19 @@ async def health_check():
     return {"status": "ok", "time": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
 
 @app.get("/api/config")
-async def get_config():
-    """获取单用户打卡配置及登录状态"""
-    token = get_active_token()
-    uf = get_current_user_file()
-    
+async def get_config(request: Request):
+    """获取当前会话关联用户的打卡配置及登录状态（实现多用户隔离）"""
+    sid = get_session_id(request)
+    sess = get_session(sid)
+    token = get_session_token(sess)
+    uf = get_user_file_for_session(sess)
+    all_users = get_all_user_names()
+
     config_data = {
+        "session_id": sid,
         "has_config": False,
         "logged_in": bool(token),
-        "name": "",
+        "name": sess.get("user_name", ""),
         "email": "",
         "thread_id": 0,
         "thread_subject": "",
@@ -163,21 +207,22 @@ async def get_config():
         "latitude": 23.099994,
         "longitude": 113.324520,
         "token_preview": (token[:10] + "...") if token else "",
+        "all_users": all_users,
     }
-    
+
     if uf and os.path.exists(uf):
         try:
             username = os.path.basename(uf)[:-5]
             with open(uf, "r", encoding="utf-8") as fp:
                 data = json.load(fp)
-            
+
             loc = data.get("Location", {})
             coords_raw = loc.get("coordinates", "{}")
             try:
                 coords = json.loads(coords_raw) if isinstance(coords_raw, str) else (coords_raw or {})
             except Exception:
                 coords = {}
-                
+
             config_data.update({
                 "has_config": True,
                 "name": username,
@@ -188,33 +233,27 @@ async def get_config():
                 "longitude": coords.get("longitude", 113.324520),
             })
         except Exception as e:
-            print(f"[Dashboard] 读取配置异常: {e}")
-            
-    return config_data
+            print(f"[Dashboard] 读取会话【{sid[:8]}】配置异常: {e}")
+
+    resp = JSONResponse(content=config_data)
+    resp.set_cookie("taskforge_sid", sid, max_age=31536000, samesite="lax")
+    return resp
 
 @app.post("/api/config")
-async def save_config(cfg: SingleUserConfigModel):
-    """保存单用户打卡配置"""
+async def save_config(request: Request, cfg: SingleUserConfigModel):
+    """保存用户打卡配置（隔离多用户，保存不覆盖其它用户文件）"""
+    sid = get_session_id(request)
+    sess = get_session(sid)
+
     clean_name = cfg.name.strip()
     if not clean_name:
         raise HTTPException(status_code=400, detail="姓名不能为空（必须与接龙打卡名单对应）")
     if not cfg.thread_id:
         raise HTTPException(status_code=400, detail="请选择或输入要打卡的接龙 ThreadId")
-        
-    token_to_use = cfg.token.strip() if cfg.token else get_active_token()
-    
-    # 清理 Tokens 目录下原有的其它用户配置，确保单用户唯一生效
-    if os.path.exists(TOKENS_DIR):
-        for f in os.listdir(TOKENS_DIR):
-            if f.endswith(".json") and f != "example.json" and not f.startswith("."):
-                fpath = os.path.join(TOKENS_DIR, f)
-                if f != f"{clean_name}.json":
-                    try:
-                        os.remove(fpath)
-                        print(f"[Dashboard] 清理旧配置文件: {f}")
-                    except Exception:
-                        pass
-                        
+
+    token_to_use = cfg.token.strip() if cfg.token else get_session_token(sess)
+
+    # 保存到对应用户的 JSON 文件（保留所有其它用户文件，保障多用户并存）
     filepath = os.path.join(TOKENS_DIR, f"{clean_name}.json")
     content = {
         "Email": cfg.email.strip() if cfg.email else "",
@@ -228,23 +267,68 @@ async def save_config(cfg: SingleUserConfigModel):
             "text": cfg.location_text.strip()
         }
     }
-    
+
     with open(filepath, "w", encoding="utf-8") as f:
         json.dump(content, f, indent=4, ensure_ascii=False)
-        
-    if token_to_use:
-        save_active_token(token_to_use)
-        
-    print(f"[Dashboard] 单用户配置已成功保存: {clean_name}")
-    return {"success": True, "message": f"用户【{clean_name}】打卡配置已成功保存！"}
+
+    # 将当前会话绑定到该用户名及 Token
+    update_session(sid, {
+        "user_name": clean_name,
+        "token": token_to_use
+    })
+
+    print(f"[Dashboard] 会话【{sid[:8]}】已成功保存用户配置: {clean_name}")
+    resp = JSONResponse(content={"success": True, "message": f"用户【{clean_name}】打卡配置已成功保存！"})
+    resp.set_cookie("taskforge_sid", sid, max_age=31536000, samesite="lax")
+    return resp
+
+@app.post("/api/session/switch-user")
+async def switch_user(request: Request, body: SwitchUserModel):
+    """切换当前客户端会话绑定的用户配置"""
+    sid = get_session_id(request)
+    target_name = body.name.strip()
+    fpath = os.path.join(TOKENS_DIR, f"{target_name}.json")
+    if not os.path.exists(fpath):
+        raise HTTPException(status_code=404, detail=f"未找到用户【{target_name}】的配置文件")
+
+    token = ""
+    try:
+        with open(fpath, "r", encoding="utf-8") as fp:
+            data = json.load(fp)
+            token = (data.get("Token") or "").strip()
+    except Exception:
+        pass
+
+    update_session(sid, {
+        "user_name": target_name,
+        "token": token
+    })
+    print(f"[Dashboard] 会话【{sid[:8]}】切换至已保存用户: {target_name}")
+    resp = JSONResponse(content={"success": True, "message": f"已切换至用户【{target_name}】"})
+    resp.set_cookie("taskforge_sid", sid, max_age=31536000, samesite="lax")
+    return resp
+
+@app.post("/api/session/new-user")
+async def new_user_session(request: Request):
+    """当前客户端会话解绑用户名（准备录入新用户的独立配置）"""
+    sid = get_session_id(request)
+    update_session(sid, {
+        "user_name": "",
+        "token": ""
+    })
+    resp = JSONResponse(content={"success": True, "message": "已就绪，可录入新用户配置"})
+    resp.set_cookie("taskforge_sid", sid, max_age=31536000, samesite="lax")
+    return resp
 
 @app.get("/api/favorites")
-async def get_favorites():
-    """从接龙管家官网 API (https://i.jielong.com/my-form?tab=5) 拉取收藏的接龙列表"""
-    token = get_active_token()
+async def get_favorites(request: Request):
+    """从接龙管家官网 API (https://i.jielong.com/my-form?tab=5) 拉取当前登录用户的收藏列表"""
+    sid = get_session_id(request)
+    sess = get_session(sid)
+    token = get_session_token(sess)
     if not token:
-        return {"success": False, "logged_in": False, "items": [], "error": "尚未登录微信，请先扫码登录"}
-        
+        return {"success": False, "logged_in": False, "items": [], "error": "当前账号尚未登录微信，请先扫码登录"}
+
     url = "https://i-api.jielong.com/api/Thread/Threads?pageIndex=1&pageSize=50&listType=5"
     headers = {
         "Authorization": f"Bearer {token}",
@@ -285,9 +369,12 @@ async def get_favorites():
         return {"success": False, "logged_in": True, "items": [], "error": f"网络请求异常: {str(e)}"}
 
 @app.get("/api/thread-detail")
-async def get_thread_detail(thread_id: Union[int, str]):
+async def get_thread_detail(request: Request, thread_id: Union[int, str]):
     """获取指定接龙的详细信息及打卡花名册 (NameRange)"""
-    token = get_active_token()
+    sid = get_session_id(request)
+    sess = get_session(sid)
+    token = get_session_token(sess)
+
     url = f"https://i-api.jielong.com/api/CheckIn/Detail?threadId={thread_id}"
     headers = {
         "User-Agent": "Mozilla/5.0",
@@ -295,7 +382,7 @@ async def get_thread_detail(thread_id: Union[int, str]):
     }
     if token:
         headers["Authorization"] = f"Bearer {token}"
-        
+
     try:
         resp = requests.get(url, headers=headers, timeout=8)
         data = resp.json()
@@ -305,7 +392,7 @@ async def get_thread_detail(thread_id: Union[int, str]):
             name_list = []
             if isinstance(raw_names, str) and raw_names.strip():
                 name_list = [n.strip() for n in re.split(r'[\r\n]+', raw_names) if n.strip()]
-                
+
             pos_setting = thread.get("PositionSetting")
             has_pos = thread.get("HasPositionSetting", False) or bool(pos_setting)
             return {
@@ -326,7 +413,7 @@ async def get_thread_detail(thread_id: Union[int, str]):
         raise HTTPException(status_code=500, detail=f"解析接龙详情失败: {str(e)}")
 
 @app.get("/api/resolve-thread")
-async def resolve_thread(query: str):
+async def resolve_thread(request: Request, query: str):
     """自动将网页链接 (https://i.jielong.com/c/1WVD88CV8F) 或短码自动解析为纯数字 ThreadId"""
     query = query.strip()
     if not query:
@@ -344,7 +431,9 @@ async def resolve_thread(query: str):
     try:
         url = f"https://i-api.jielong.com/api/CheckIn/Detail?threadId={code}"
         headers = {"User-Agent": "Mozilla/5.0"}
-        token = get_active_token()
+        sid = get_session_id(request)
+        sess = get_session(sid)
+        token = get_session_token(sess)
         if token:
             headers["Authorization"] = f"Bearer {token}"
         resp = requests.get(url, headers=headers, timeout=6)
@@ -381,7 +470,14 @@ async def resolve_thread(query: str):
     raise HTTPException(status_code=400, detail="未能自动解析该接龙，请检查链接或直接输入纯数字 ID")
 
 @app.get("/api/status")
-async def get_status():
+async def get_status(request: Request):
+    """获取调度引擎运行状态及当前会话信息"""
+    sid = get_session_id(request)
+    sess = get_session(sid)
+    token = get_session_token(sess)
+    user_name = sess.get("user_name") or "未绑定"
+    all_users = get_all_user_names()
+
     tasks_info = []
     for t in TaskManager.TaskManager.task_group:
         tasks_info.append({
@@ -393,65 +489,98 @@ async def get_status():
             "count": t.count,
         })
 
-    uf = get_current_user_file()
-    token = get_active_token()
-
     return {
         "server_time": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        "has_user": bool(uf),
+        "session_id": sid[:8] + "...",
+        "has_user": bool(user_name and user_name != "未绑定"),
         "logged_in": bool(token),
-        "user_name": os.path.basename(uf)[:-5] if uf else "未配置",
+        "user_name": user_name,
+        "total_users": len(all_users),
+        "all_users": all_users,
         "tasks": tasks_info,
         "config_modules": TaskManager.TaskManager.module_names,
     }
 
 # --- 打卡触发 API ---
 @app.post("/api/punch")
-async def punch_current():
-    """立即对当前配置的用户执行打卡测试"""
-    uf = get_current_user_file()
-    if not uf or not os.path.exists(uf):
-        raise HTTPException(status_code=400, detail="未检测到已保存的用户配置，请先完善并保存配置")
+async def punch_current(request: Request):
+    """立即对当前会话绑定的用户执行打卡测试（实现按用户隔离触发）"""
+    sid = get_session_id(request)
+    sess = get_session(sid)
+    username = (sess.get("user_name") or "").strip()
 
-    username = os.path.basename(uf)[:-5]
+    if not username:
+        all_users = get_all_user_names()
+        if len(all_users) == 1:
+            username = all_users[0]
+            update_session(sid, {"user_name": username})
+        else:
+            raise HTTPException(status_code=400, detail="当前会话尚未绑定打卡用户，请先保存配置或选择用户")
 
-    def worker():
+    uf = os.path.join(TOKENS_DIR, f"{username}.json")
+    if not os.path.exists(uf):
+        raise HTTPException(status_code=400, detail=f"未找到用户【{username}】的配置文件，请先完善并保存配置")
+
+    def worker(uname: str):
         try:
-            print(f"[Dashboard] 手动触发用户【{username}】打卡...")
-            自动打卡.PunchCard.PunchCard(username).Main()
+            print(f"[Dashboard] 手动触发用户【{uname}】打卡...")
+            自动打卡.PunchCard.PunchCard(uname).Main()
         except Exception as e:
-            print(f"[Dashboard] 用户【{username}】打卡异常: {e}")
+            print(f"[Dashboard] 用户【{uname}】打卡异常: {e}")
 
-    threading.Thread(target=worker, daemon=True).start()
+    threading.Thread(target=worker, args=(username,), daemon=True).start()
     return {"success": True, "message": f"用户【{username}】打卡任务已在后台启动，请查看实时日志"}
 
 @app.post("/api/punch/{name}")
 async def punch_single_user(name: str):
-    return await punch_current()
+    """触发指定用户的打卡测试"""
+    clean_name = name.strip()
+    uf = os.path.join(TOKENS_DIR, f"{clean_name}.json")
+    if not os.path.exists(uf):
+        raise HTTPException(status_code=404, detail=f"未找到用户【{clean_name}】的配置文件")
+
+    def worker(uname: str):
+        try:
+            print(f"[Dashboard] 手动触发指定用户【{uname}】打卡...")
+            自动打卡.PunchCard.PunchCard(uname).Main()
+        except Exception as e:
+            print(f"[Dashboard] 用户【{uname}】打卡异常: {e}")
+
+    threading.Thread(target=worker, args=(clean_name,), daemon=True).start()
+    return {"success": True, "message": f"用户【{clean_name}】打卡任务已在后台启动，请查看实时日志"}
 
 @app.post("/api/punch-all")
-async def punch_all():
-    return await punch_current()
+async def punch_all(request: Request):
+    return await punch_current(request)
 
-# --- 在线微信扫码授权流程 ---
+# --- 在线微信扫码授权流程（按 Session 隔离） ---
 @app.post("/api/auth/start-qr")
 @app.post("/api/auth/start-qr/{name}")
-async def start_qr_auth(name: Optional[str] = "User"):
+async def start_qr_auth(request: Request, name: Optional[str] = "User"):
+    sid = get_session_id(request)
     qr_getter = 自动打卡.WechatTokenWorkflow.GetQRCode()
-    uuid = qr_getter.getQRCodeEV("WebAuth")
-    if not uuid:
+    uuid_val = qr_getter.getQRCodeEV(f"WebAuth-{sid[:8]}")
+    if not uuid_val:
         raise HTTPException(status_code=500, detail="获取微信二维码失败，请稍后重试")
 
-    qr_url = f"https://open.weixin.qq.com/connect/qrcode/{uuid}"
-    return {
+    _qr_session_map[uuid_val] = sid
+    qr_url = f"https://open.weixin.qq.com/connect/qrcode/{uuid_val}"
+    resp = JSONResponse(content={
         "success": True,
-        "uuid": uuid,
+        "uuid": uuid_val,
         "qr_url": qr_url,
+        "session_id": sid,
         "message": "请使用微信扫描二维码登录接龙管家"
-    }
+    })
+    resp.set_cookie("taskforge_sid", sid, max_age=31536000, samesite="lax")
+    return resp
 
 @app.get("/api/auth/poll-qr")
-async def poll_qr_status(uuid: str, name: Optional[str] = ""):
+async def poll_qr_status(request: Request, uuid: str):
+    sid = get_session_id(request)
+    if not sid or sid not in load_sessions():
+        sid = _qr_session_map.get(uuid, sid)
+
     timestamp = int(time.time() * 1000)
     url = f"https://lp.open.weixin.qq.com/connect/l/qrconnect?uuid={uuid}&last=404&_={timestamp}"
     headers = {
@@ -466,7 +595,7 @@ async def poll_qr_status(uuid: str, name: Optional[str] = ""):
 
         if "window.wx_errcode=408" in text:
             return {"status": "waiting", "message": "等待手机微信扫码..."}
-        
+
         if "window.wx_errcode=404" in text:
             return {"status": "scanned", "message": "已扫码！请在手机微信上点击【允许/确认登录】"}
 
@@ -474,17 +603,35 @@ async def poll_qr_status(uuid: str, name: Optional[str] = ""):
             match = re.search(r"window\.wx_code='([^']*)'", text)
             if match:
                 wx_code = match.group(1)
-                print(f"[WebAuth] 成功捕获 wx_code: {wx_code}")
+                print(f"[WebAuth-{sid[:8]}] 成功捕获 wx_code: {wx_code}")
                 # 换取 Token
                 auth_worker = 自动打卡.WechatTokenWorkflow.GetAuthorization(wx_code)
-                token = auth_worker.getToken("WebAuth")
+                token = auth_worker.getToken(f"WebAuth-{sid[:8]}")
                 if token:
-                    save_active_token(token)
-                    return {"status": "success", "token": token, "message": "🎉 微信授权成功！已绑定登录"}
+                    sess = update_session(sid, {"token": token})
+                    # 若该会话已绑定了用户文件，同步更新该文件的 Token
+                    if sess.get("user_name"):
+                        uf = os.path.join(TOKENS_DIR, f"{sess['user_name']}.json")
+                        if os.path.exists(uf):
+                            try:
+                                with open(uf, "r", encoding="utf-8") as fp:
+                                    udata = json.load(fp)
+                                udata["Token"] = token
+                                with open(uf, "w", encoding="utf-8") as fp:
+                                    json.dump(udata, fp, indent=4, ensure_ascii=False)
+                                print(f"[WebAuth-{sid[:8]}] 同步更新用户【{sess['user_name']}】的 Token")
+                            except Exception as e:
+                                print(f"[WebAuth] 同步更新用户文件失败: {e}")
+
+                    _qr_session_map.pop(uuid, None)
+                    resp = JSONResponse(content={"status": "success", "token": token, "message": "🎉 微信授权成功！已绑定当前用户"})
+                    resp.set_cookie("taskforge_sid", sid, max_age=31536000, samesite="lax")
+                    return resp
                 else:
                     return {"status": "error", "message": "获取 Token 失败，请重试"}
 
         if "window.wx_errcode=403" in text or "window.wx_errcode=402" in text:
+            _qr_session_map.pop(uuid, None)
             return {"status": "expired", "message": "二维码已失效，请重新生成"}
 
         return {"status": "waiting", "message": "等待扫码..."}
@@ -492,54 +639,63 @@ async def poll_qr_status(uuid: str, name: Optional[str] = ""):
         return {"status": "waiting", "message": f"网络轮询中... ({e})"}
 
 @app.post("/api/logout")
-async def logout():
-    """退出登录"""
-    if os.path.exists(SESSION_TOKEN_FILE):
-        try:
-            os.remove(SESSION_TOKEN_FILE)
-        except Exception:
-            pass
-    uf = get_current_user_file()
-    if uf and os.path.exists(uf):
-        try:
-            with open(uf, "r", encoding="utf-8") as fp:
-                data = json.load(fp)
-            data["Token"] = ""
-            with open(uf, "w", encoding="utf-8") as fp:
-                json.dump(data, fp, indent=4, ensure_ascii=False)
-        except Exception:
-            pass
-    print("[Dashboard] 用户已退出登录，Token 已清除")
-    return {"success": True, "message": "已退出登录"}
+async def logout(request: Request):
+    """退出当前会话的微信登录状态"""
+    sid = get_session_id(request)
+    update_session(sid, {"token": ""})
+    print(f"[Dashboard] 会话【{sid[:8]}】已退出登录，Token 已清除")
+    resp = JSONResponse(content={"success": True, "message": "已退出登录"})
+    resp.set_cookie("taskforge_sid", sid, max_age=31536000, samesite="lax")
+    return resp
 
-# --- 兼容老接口 ---
+# --- 多用户列表与兼容接口 ---
 @app.get("/api/users")
 async def list_users():
-    cfg = await get_config()
-    if cfg["has_config"]:
-        return [{
-            "name": cfg["name"],
-            "email": cfg["email"],
-            "has_token": bool(cfg["token_preview"]),
-            "token_preview": cfg["token_preview"],
-            "thread_id": cfg["thread_id"],
-            "location_text": cfg["location_text"],
-            "latitude": cfg["latitude"],
-            "longitude": cfg["longitude"],
-        }]
-    return []
+    """获取系统中所有已保存的用户打卡概要"""
+    all_users = get_all_user_names()
+    user_list = []
+    for u in all_users:
+        fpath = os.path.join(TOKENS_DIR, f"{u}.json")
+        try:
+            with open(fpath, "r", encoding="utf-8") as fp:
+                data = json.load(fp)
+            token = (data.get("Token") or "").strip()
+            loc = data.get("Location", {})
+            coords_raw = loc.get("coordinates", "{}")
+            try:
+                coords = json.loads(coords_raw) if isinstance(coords_raw, str) else (coords_raw or {})
+            except Exception:
+                coords = {}
+            user_list.append({
+                "name": u,
+                "email": data.get("Email", ""),
+                "has_token": bool(token),
+                "token_preview": (token[:10] + "...") if token else "",
+                "thread_id": data.get("ThreadId", 0),
+                "location_text": loc.get("text", ""),
+                "latitude": coords.get("latitude", 23.099994),
+                "longitude": coords.get("longitude", 113.324520),
+            })
+        except Exception:
+            pass
+    return user_list
 
 @app.post("/api/users")
-async def save_user_compat(config: SingleUserConfigModel):
-    return await save_config(config)
+async def save_user_compat(request: Request, config: SingleUserConfigModel):
+    return await save_config(request, config)
 
 @app.delete("/api/users/{name}")
-async def delete_user(name: str):
-    filepath = os.path.join(TOKENS_DIR, f"{name}.json")
+async def delete_user(request: Request, name: str):
+    clean_name = name.strip()
+    filepath = os.path.join(TOKENS_DIR, f"{clean_name}.json")
     if os.path.exists(filepath):
         os.remove(filepath)
-        print(f"[Dashboard] 用户配置已删除: {name}")
-        return {"success": True, "message": f"已删除用户 {name}"}
+        sid = get_session_id(request)
+        sess = get_session(sid)
+        if sess.get("user_name") == clean_name:
+            update_session(sid, {"user_name": "", "token": ""})
+        print(f"[Dashboard] 用户配置已删除: {clean_name}")
+        return {"success": True, "message": f"已删除用户 {clean_name}"}
     raise HTTPException(status_code=404, detail="用户不存在")
 
 # --- 实时日志流 ---

@@ -42,7 +42,7 @@ def main():
         # 获取所有.json文件（排除模版文件 example.json）
         json_files = [
             f for f in os.listdir(tokens_dir)
-            if f.endswith('.json') and f != 'example.json'
+            if f.endswith('.json') and f != 'example.json' and not f.startswith('.')
         ]
         
         if not json_files:

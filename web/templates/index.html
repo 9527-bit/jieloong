@@ -799,6 +799,10 @@
         <div>TaskForge</div>
       </div>
       <div class="header-right">
+        <div id="currentUserBadge" class="status-badge" style="background: rgba(10, 132, 255, 0.12); color: #93c5fd; border: 1px solid rgba(10, 132, 255, 0.3);">
+          <span>👤 会话用户:</span>
+          <strong id="currentUserNameText" style="color: #fff; margin-left: 2px;">未绑定</strong>
+        </div>
         <span id="serverTimeText" style="font-family: var(--font-mono); font-size: 0.85rem; color: var(--text-secondary);">--:--:--</span>
         <div id="schedulerStatusBadge" class="status-badge badge-online">
           <span class="dot-pulse"></span>
@@ -822,7 +826,18 @@
         <span style="color: rgba(255,255,255,0.2);">➔</span>
         <div class="ribbon-step"><span class="num">4</span> 每天自动定时打卡</div>
       </div>
-      <div class="ribbon-tag"> 单用户工作站</div>
+      <div class="ribbon-tag" id="userIsolationBadge"> 独立会话隔离</div>
+    </div>
+
+    <!-- 用户切换与隔离工具条 -->
+    <div id="userSwitcherBar" style="display: none; margin-bottom: 1.5rem; padding: 0.85rem 1.25rem; background: var(--glass-surface); backdrop-filter: var(--blur-val); border: 1px solid var(--glass-border); border-radius: 18px; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap;">
+      <div style="display: flex; align-items: center; gap: 0.65rem; flex-wrap: wrap;">
+        <span style="font-size: 0.88rem; font-weight: 600; color: #94a3b8;">👥 系统已存打卡配置:</span>
+        <div id="userChipsContainer" style="display: flex; gap: 0.45rem; flex-wrap: wrap;"></div>
+      </div>
+      <div style="display: flex; gap: 0.6rem; align-items: center;">
+        <button class="btn btn-outline btn-sm" onclick="handleNewUserClick()" style="font-size: 0.82rem; padding: 0.35rem 0.85rem;">➕ 录入新打卡人</button>
+      </div>
     </div>
 
     <!-- STEP 1: 微信扫码授权 -->
@@ -1065,6 +1080,29 @@
     let selectedThreadData = null;
     let currentFavorites = [];
 
+    // --- 客户端会话唯一标识 (用户隔离核心) ---
+    function getSessionId() {
+      let sid = localStorage.getItem('taskforge_sid');
+      if (!sid || sid.trim() === '') {
+        sid = 'sid_' + Math.random().toString(36).substring(2, 10) + '_' + Date.now();
+        localStorage.setItem('taskforge_sid', sid);
+      }
+      return sid;
+    }
+
+    // --- 统一 API 客户端 (注入 Session ID 头部与 Cookie) ---
+    async function apiFetch(url, options = {}) {
+      options.headers = options.headers || {};
+      const sid = getSessionId();
+      if (options.headers instanceof Headers) {
+        options.headers.set('X-Session-Id', sid);
+      } else {
+        options.headers['X-Session-Id'] = sid;
+      }
+      options.credentials = 'same-origin';
+      return fetch(url, options);
+    }
+
     // --- 页面初始化 ---
     document.addEventListener('DOMContentLoaded', async () => {
       await loadAppConfig();
@@ -1076,11 +1114,83 @@
       setInterval(loadLogs, 5000);
     });
 
-    // --- 加载当前用户配置与登录状态 ---
+    // --- 渲染系统已有用户切换条 ---
+    function renderUserSwitcher(allUsers, currentUser) {
+      const bar = document.getElementById('userSwitcherBar');
+      const container = document.getElementById('userChipsContainer');
+      if (!bar || !container) return;
+
+      if (!allUsers || allUsers.length === 0) {
+        bar.style.display = 'none';
+        return;
+      }
+
+      bar.style.display = 'flex';
+      let html = '';
+      allUsers.forEach(uname => {
+        const isActive = uname === currentUser;
+        html += `
+          <span class="roster-chip ${isActive ? 'active' : ''}" style="font-size: 0.82rem; padding: 0.25rem 0.75rem;" onclick="handleSwitchUser('${escapeHtml(uname)}')">
+            👤 ${escapeHtml(uname)} ${isActive ? '✓' : ''}
+          </span>
+        `;
+      });
+      container.innerHTML = html;
+    }
+
+    // --- 切换至指定已有用户 ---
+    async function handleSwitchUser(name) {
+      try {
+        const res = await apiFetch('/api/session/switch-user', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name })
+        });
+        const ret = await res.json();
+        if (ret.success) {
+          showSaveTip(`已将会话切换至用户【${name}】`, '#30D158');
+          await loadAppConfig();
+        } else {
+          alert(ret.detail || '切换用户失败');
+        }
+      } catch (e) {
+        alert('切换用户异常: ' + e);
+      }
+    }
+
+    // --- 准备录入新用户 ---
+    async function handleNewUserClick() {
+      if (!confirm('确定要切换为录入新用户吗？这不会影响已有用户的配置和定时打卡。')) return;
+      try {
+        await apiFetch('/api/session/new-user', { method: 'POST' });
+        document.getElementById('configName').value = '';
+        document.getElementById('configEmail').value = '';
+        document.getElementById('configThreadId').value = '';
+        document.getElementById('configLocationText').value = '';
+        document.getElementById('currentUserNameText').textContent = '未绑定';
+        showSaveTip('已进入新用户录入模式，请扫码授权并设置打卡信息', '#93c5fd');
+        await loadAppConfig();
+      } catch (e) {
+        alert('操作异常: ' + e);
+      }
+    }
+
+    // --- 加载当前会话用户配置与登录状态 ---
     async function loadAppConfig() {
       try {
-        const res = await fetch('/api/config');
+        const res = await apiFetch('/api/config');
         const data = await res.json();
+
+        if (data.session_id) {
+          localStorage.setItem('taskforge_sid', data.session_id);
+        }
+
+        // 更新顶部会话用户名
+        const currentName = data.name || (data.has_config ? data.name : '未绑定');
+        document.getElementById('currentUserNameText').textContent = currentName;
+
+        // 渲染系统已有用户切换列表
+        renderUserSwitcher(data.all_users || [], data.name || '');
 
         if (data.logged_in) {
           showLoggedView(data.token_preview);
@@ -1090,7 +1200,7 @@
           fetchNewQRCode();
         }
 
-        // 如果已经保存过用户配置，自动回显到表单
+        // 如果当前会话已绑定有效配置，自动回显到表单
         if (data.has_config) {
           document.getElementById('configName').value = data.name || '';
           document.getElementById('configEmail').value = data.email || '';
@@ -1131,7 +1241,7 @@
       statusText.textContent = '获取二维码中...';
 
       try {
-        const res = await fetch('/api/auth/start-qr', { method: 'POST' });
+        const res = await apiFetch('/api/auth/start-qr', { method: 'POST' });
         const data = await res.json();
         if (data.success && data.uuid) {
           box.innerHTML = `<img src="${data.qr_url}" alt="微信授权二维码">`;
@@ -1150,7 +1260,7 @@
       if (pollQrTimer) clearInterval(pollQrTimer);
       pollQrTimer = setInterval(async () => {
         try {
-          const res = await fetch(`/api/auth/poll-qr?uuid=${encodeURIComponent(uuid)}`);
+          const res = await apiFetch(`/api/auth/poll-qr?uuid=${encodeURIComponent(uuid)}`);
           const data = await res.json();
 
           const statusText = document.getElementById('qrStatusText');
@@ -1182,9 +1292,9 @@
     }
 
     async function handleLogout() {
-      if (!confirm('确定要退出当前微信账号登录吗？')) return;
+      if (!confirm('确定要退出当前账号的微信登录吗？')) return;
       try {
-        await fetch('/api/logout', { method: 'POST' });
+        await apiFetch('/api/logout', { method: 'POST' });
         showQrLoginView();
         fetchNewQRCode();
         document.getElementById('favoritesContainer').innerHTML = '<div style="color: var(--text-secondary); font-size: 0.9rem; padding: 1.5rem; text-align: center;">请先扫码登录后查看收藏的接龙</div>';
@@ -1199,7 +1309,7 @@
       container.innerHTML = '<div style="color: var(--text-secondary); font-size: 0.9rem; padding: 1.5rem; text-align: center;">⏳ 正在从接龙管家官网拉取收藏表单...</div>';
 
       try {
-        const res = await fetch('/api/favorites');
+        const res = await apiFetch('/api/favorites');
         const data = await res.json();
 
         if (!data.logged_in) {
@@ -1285,7 +1395,7 @@
     // --- 获取指定接龙详情与花名册 ---
     async function fetchThreadDetail(threadId, autoScrollToStep3 = false) {
       try {
-        const res = await fetch(`/api/thread-detail?thread_id=${threadId}`);
+        const res = await apiFetch(`/api/thread-detail?thread_id=${threadId}`);
         const data = await res.json();
         if (data.success) {
           selectedThreadData = data;
@@ -1382,7 +1492,7 @@
       tip.textContent = '⏳ 正在解析接龙信息...';
 
       try {
-        const res = await fetch(`/api/resolve-thread?query=${encodeURIComponent(val)}`);
+        const res = await apiFetch(`/api/resolve-thread?query=${encodeURIComponent(val)}`);
         const data = await res.json();
         if (data.success && data.thread_id) {
           tip.style.color = '#34d399';
@@ -1423,7 +1533,7 @@
       btn.textContent = '保存中...';
 
       try {
-        const res = await fetch('/api/config', {
+        const res = await apiFetch('/api/config', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload)
@@ -1431,6 +1541,7 @@
         const ret = await res.json();
         if (ret.success) {
           showSaveTip('✅ 打卡配置已保存成功！', '#34d399');
+          await loadAppConfig();
           await loadStatus();
         } else {
           alert(ret.detail || '保存失败');
@@ -1458,7 +1569,7 @@
       btn.textContent = '正在触发...';
 
       try {
-        const res = await fetch('/api/punch', { method: 'POST' });
+        const res = await apiFetch('/api/punch', { method: 'POST' });
         const data = await res.json();
         showSaveTip(data.message || '打卡任务已启动', '#34d399');
         document.querySelector('.log-card').scrollIntoView({ behavior: 'smooth' });
@@ -1474,7 +1585,7 @@
     // --- 实时日志流渲染 ---
     async function loadLogs(notice = false) {
       try {
-        const res = await fetch('/api/logs');
+        const res = await apiFetch('/api/logs');
         const logs = await res.json();
         const win = document.getElementById('terminalWindow');
 
@@ -1516,7 +1627,7 @@
     // --- 调度器状态监控 ---
     async function loadStatus() {
       try {
-        const res = await fetch('/api/status');
+        const res = await apiFetch('/api/status');
         const data = await res.json();
 
         document.getElementById('serverTimeText').textContent = data.server_time || '--:--:--';
