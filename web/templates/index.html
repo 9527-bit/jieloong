@@ -852,6 +852,10 @@
             请使用手机微信扫描左侧二维码，在微信手机端点击<strong>【允许 / 确认登录】</strong>。<br>
             授权成功后系统将自动识别你的接龙管家账号并拉取收藏列表。
           </p>
+          <div style="background: rgba(10, 132, 255, 0.1); border: 1px solid rgba(10, 132, 255, 0.28); border-radius: 12px; padding: 0.65rem 0.95rem; font-size: 0.83rem; color: #93c5fd; display: flex; align-items: center; gap: 0.5rem;">
+            <span>⏳</span>
+            <span><strong>Token 3天有效期提醒：</strong>微信授权凭证官方有效期为 <strong>3 天 (72小时)</strong>。过期后将无法自动打卡，请每隔 3 天返回本页面重新扫码登录续期。</span>
+          </div>
           <div style="display: flex; gap: 0.75rem;">
             <button class="btn btn-outline btn-sm" onclick="fetchNewQRCode()">🔄 刷新二维码</button>
           </div>
@@ -864,12 +868,15 @@
           <div class="logged-left">
             <div class="logged-avatar">✓</div>
             <div>
-              <div class="logged-title">已成功授权接龙管家</div>
-              <div class="logged-sub" id="loggedSubText">登录状态有效，已就绪</div>
+              <div style="display: flex; align-items: center; gap: 0.6rem;">
+                <span class="logged-title">已成功授权接龙管家</span>
+                <span style="font-size: 0.75rem; padding: 0.15rem 0.6rem; border-radius: 9999px; background: rgba(255, 159, 10, 0.18); border: 1px solid rgba(255, 159, 10, 0.35); color: #fde68a; font-weight: 600;">⏳ Token 有效期 3 天</span>
+              </div>
+              <div class="logged-sub" id="loggedSubText">登录状态有效，已就绪（微信 Token 有效期为 3 天，过期请及时点击右侧按钮重新扫码续期）</div>
             </div>
           </div>
           <div style="display: flex; gap: 0.75rem;">
-            <button class="btn btn-outline btn-sm" onclick="handleReAuth()">🔄 重新扫码登录</button>
+            <button class="btn btn-outline btn-sm" onclick="handleReAuth()">🔄 重新扫码续期</button>
             <button class="btn btn-danger-outline btn-sm" onclick="handleLogout()">退出登录</button>
           </div>
         </div>
@@ -1001,6 +1008,14 @@
               <span style="font-size: 0.8rem; font-weight: normal; color: var(--text-secondary);">可选，若未配置 SMTP 可留空</span>
             </label>
             <input type="email" id="configEmail" class="input-field" placeholder="例如：user@example.com (可留空)">
+          </div>
+        </div>
+
+        <!-- 保存配置重点提醒栏 -->
+        <div style="margin-top: 1.4rem; background: linear-gradient(135deg, rgba(255, 159, 10, 0.12), rgba(255, 69, 58, 0.08)); border: 1px solid rgba(255, 159, 10, 0.38); border-radius: 16px; padding: 0.95rem 1.3rem; font-size: 0.88rem; color: #fde68a; display: flex; align-items: center; gap: 0.85rem; box-shadow: var(--glass-specular);">
+          <span style="font-size: 1.35rem; flex-shrink: 0;">⚠️</span>
+          <div style="line-height: 1.55;">
+            <strong>重要提醒：</strong>修改姓名、接龙表单或地点坐标后，<strong>请务必先点击下方的【💾 保存打卡配置】</strong>！未点击保存的参数不会写入服务器，后台定时调度引擎将无法按新配置执行打卡。
           </div>
         </div>
 
