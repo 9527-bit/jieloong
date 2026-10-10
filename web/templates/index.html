@@ -539,8 +539,12 @@
           <input type="email" class="form-input" id="inputEmail" required placeholder="例如：user@qq.com">
         </div>
         <div class="form-group">
-          <label class="form-label">接龙 ID (ThreadId，纯数字) *</label>
-          <input type="number" class="form-input" id="inputThreadId" required placeholder="例如：123456789">
+          <label class="form-label">接龙 ID 或网页链接 (支持直接粘贴网址如 https://i.jielong.com/c/1WVD88CV8F 或纯数字) *</label>
+          <div style="display: flex; gap: 0.5rem;">
+            <input type="text" class="form-input" id="inputThreadId" required placeholder="例如：187336835 或粘贴网页链接" oninput="debounceResolveThread()">
+            <button type="button" class="btn btn-outline btn-sm" style="flex-shrink: 0;" onclick="autoResolveThread()">🔍 自动解析</button>
+          </div>
+          <div id="threadResolveTip" style="font-size: 0.8rem; margin-top: 0.35rem; display: none;"></div>
         </div>
         <div class="form-group">
           <label class="form-label">打卡地理位置描述 (界面显示的地址) *</label>
@@ -687,13 +691,66 @@
       }
     }
 
+    let resolveDebounceTimer = null;
+    function debounceResolveThread() {
+      if (resolveDebounceTimer) clearTimeout(resolveDebounceTimer);
+      resolveDebounceTimer = setTimeout(autoResolveThread, 400);
+    }
+
+    async function autoResolveThread() {
+      const val = document.getElementById('inputThreadId').value.trim();
+      const tip = document.getElementById('threadResolveTip');
+      if (!val) {
+        tip.style.display = 'none';
+        return;
+      }
+      tip.style.display = 'block';
+      tip.style.color = '#94a3b8';
+      tip.textContent = '⏳ 正在向接龙管家接口解析接龙信息...';
+
+      try {
+        const res = await fetch(`/api/resolve-thread?query=${encodeURIComponent(val)}`);
+        const data = await res.json();
+        if (data.success && data.thread_id) {
+          tip.style.color = '#10b981';
+          tip.textContent = `✅ 已解析到：【${data.subject}】(数字 ID: ${data.thread_id})`;
+          document.getElementById('inputThreadId').dataset.resolvedId = data.thread_id;
+        } else {
+          tip.style.color = '#f59e0b';
+          tip.textContent = data.detail || '⚠️ 解析失败，请输入有效网址或纯数字 ID';
+        }
+      } catch (err) {
+        tip.style.color = '#ef4444';
+        tip.textContent = '网络请求失败: ' + err.message;
+      }
+    }
+
     // 保存用户
     async function handleSaveUser(e) {
       e.preventDefault();
+      let threadIdVal = document.getElementById('inputThreadId').dataset.resolvedId || document.getElementById('inputThreadId').value.trim();
+
+      // 如果还是非数字（比如用户直接粘贴网址就点了提交），先自动解析一次
+      if (isNaN(threadIdVal) || !threadIdVal) {
+        try {
+          const res = await fetch(`/api/resolve-thread?query=${encodeURIComponent(document.getElementById('inputThreadId').value.trim())}`);
+          const data = await res.json();
+          if (data.success && data.thread_id) {
+            threadIdVal = data.thread_id;
+          } else {
+            alert('未能解析该接龙，请直接输入纯数字 ThreadId');
+            return;
+          }
+        } catch (err) {
+          alert('解析接龙 ID 出错: ' + err.message);
+          return;
+        }
+      }
+
       const payload = {
         name: document.getElementById('inputName').value.trim(),
         email: document.getElementById('inputEmail').value.trim(),
-        thread_id: parseInt(document.getElementById('inputThreadId').value),
+        thread_id: parseInt(threadIdVal),
         location_text: document.getElementById('inputLocText').value.trim(),
         latitude: parseFloat(document.getElementById('inputLat').value),
         longitude: parseFloat(document.getElementById('inputLng').value)

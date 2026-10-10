@@ -96,6 +96,51 @@ async def serve_index():
 async def health_check():
     return {"status": "ok", "time": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
 
+@app.get("/api/resolve-thread")
+async def resolve_thread(query: str):
+    """自动将网页链接 (https://i.jielong.com/c/1WVD88CV8F) 或短码自动解析为纯数字 ThreadId"""
+    query = query.strip()
+    if not query:
+        raise HTTPException(status_code=400, detail="请输入接龙链接或编号")
+
+    code = query
+    match_c = re.search(r"/c/([a-zA-Z0-9]+)", query)
+    if match_c:
+        code = match_c.group(1)
+    else:
+        match_id = re.search(r"threadId=([a-zA-Z0-9]+)", query, re.IGNORECASE)
+        if match_id:
+            code = match_id.group(1)
+
+    try:
+        url = f"https://i-api.jielong.com/api/CheckIn/Detail?threadId={code}"
+        headers = {"User-Agent": "Mozilla/5.0"}
+        resp = requests.get(url, headers=headers, timeout=6)
+        if resp.status_code == 200:
+            data = resp.json()
+            thread = data.get("Data", {}).get("Thread", {})
+            if thread and "ThreadId" in thread:
+                return {
+                    "success": True,
+                    "thread_id": thread["ThreadId"],
+                    "str_id": thread.get("ThreadStrId", code),
+                    "subject": thread.get("Subject", "未知标题"),
+                    "author": thread.get("Author", "未知发起人")
+                }
+    except Exception as e:
+        print(f"[API] 自动解析 ThreadId 出错: {e}")
+
+    if query.isdigit():
+        return {
+            "success": True,
+            "thread_id": int(query),
+            "str_id": query,
+            "subject": f"接龙 ID: {query}",
+            "author": ""
+        }
+
+    raise HTTPException(status_code=400, detail="未能自动解析该接龙，请检查链接或直接输入纯数字 ID")
+
 @app.get("/api/status")
 async def get_status():
     tasks_info = []
