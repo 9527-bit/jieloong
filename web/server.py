@@ -83,7 +83,7 @@ class UserConfigModel(BaseModel):
     token: Optional[str] = ""
 
 # --- 页面路由 ---
-@app.get("/", response_class=HTMLResponse)
+@app.api_route("/", methods=["GET", "HEAD"], response_class=HTMLResponse)
 async def serve_index():
     index_path = os.path.join(os.path.dirname(__file__), "templates", "index.html")
     if os.path.exists(index_path):
@@ -92,7 +92,7 @@ async def serve_index():
     return "<h1>TaskForge Web Dashboard</h1><p>templates/index.html not found</p>"
 
 # --- API 路由 ---
-@app.get("/api/health")
+@app.api_route("/api/health", methods=["GET", "HEAD"])
 async def health_check():
     return {"status": "ok", "time": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
 
