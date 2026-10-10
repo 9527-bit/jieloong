@@ -20,18 +20,23 @@ class Sendmail:
         :param receiver: 收件人邮箱
         :param log_prefix: 日志前缀，用于区分不同线程的日志
         """
+        # 默认关闭邮件通知，仅在明确设置 ENABLE_EMAIL=true 且发件箱有效时才发送
+        enable_email = os.environ.get("ENABLE_EMAIL", "false").lower() == "true"
+        if not enable_email or not self.sender or self.sender == "your_email@qq.com" or not self.password or self.password == "your_auth_code":
+            return
+
         # 创建邮件对象
         msg = MIMEText(html_content, "html", "utf-8")
         msg["Subject"] = subject
         msg["From"] = self.sender
         msg["To"] = receiver
 
+        server = None
         try:
-            # 所有日志添加统一时间格式
             print(
                 f"[{datetime.now().strftime('%Y-%m-%d  %H:%M:%S')}] {log_prefix}: 开始连接邮件服务器..."
             )
-            server = smtplib.SMTP_SSL("smtp.qq.com", 465)
+            server = smtplib.SMTP_SSL("smtp.qq.com", 465, timeout=10)
             server.login(self.sender, self.password)
             print(
                 f"[{datetime.now().strftime('%Y-%m-%d  %H:%M:%S')}] {log_prefix}: 成功连接并登录邮件服务器"
@@ -49,13 +54,11 @@ class Sendmail:
                 f"[{datetime.now().strftime('%Y-%m-%d  %H:%M:%S')}] {log_prefix}: {Class}发送失败: {e}"
             )
         finally:
-            try:
-                server.quit()
-                print(
-                    f"[{datetime.now().strftime('%Y-%m-%d  %H:%M:%S')}] {log_prefix}: 邮件服务器连接已关闭"
-                )
-            except NameError:
-                pass
+            if server:
+                try:
+                    server.quit()
+                except Exception:
+                    pass
 
     def sendAuthorizationMail(self, extracted_value, receiver, log_prefix):
         """发送授权邮件"""

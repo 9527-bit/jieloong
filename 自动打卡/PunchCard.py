@@ -101,7 +101,7 @@ class PunchCard:
                 f"[{datetime.now().strftime('%Y-%m-%d  %H:%M:%S')}] {self.Name}: 开始构建请求体"
             )
             self.UpdataToken()
-            self.url = "https://h-api.jielong.co/api/CheckIn/EditRecord"
+            self.url = "https://i-api.jielong.com/api/CheckIn/EditRecord"
             self.payload = json.dumps({
                 "Id":
                 0,
@@ -138,10 +138,10 @@ class PunchCard:
             })
             self.headers = {
                 "Authorization": "Bearer %s" % self.Token,
-                "User-Agent": "Apifox/1.0.0 (https://apifox.com)",
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.6261.95 Safari/537.36",
                 "Content-Type": "application/json",
                 "Accept": "*/*",
-                "Host": "h-api.jielong.co",
+                "Host": "i-api.jielong.com",
                 "Connection": "keep-alive",
             }
             # 输出构建请求体完成的日志
@@ -340,21 +340,63 @@ class PunchCard:
                     return
 
             response = self.RTS()
-            if (response and response.json().get("Data") == "打卡成功"
-                    and response.json().get("Description") == "打卡成功"):
-                # 发送打卡成功邮件
+            resp_json = None
+            if response:
+                try:
+                    resp_json = response.json()
+                    print(
+                        f"[{datetime.now().strftime('%Y-%m-%d  %H:%M:%S')}] {self.Name}: 服务器响应: {response.text}"
+                    )
+                except Exception:
+                    print(
+                        f"[{datetime.now().strftime('%Y-%m-%d  %H:%M:%S')}] {self.Name}: 服务器响应代码: {response.status_code}"
+                    )
+
+            is_success = False
+            if resp_json:
+                desc = str(resp_json.get("Description", ""))
+                data_val = str(resp_json.get("Data", ""))
+                if "打卡成功" in desc or "打卡成功" in data_val or "成功" in desc:
+                    is_success = True
+
+            if is_success:
+                print(
+                    f"[{datetime.now().strftime('%Y-%m-%d  %H:%M:%S')}] {self.Name}: 打卡成功！"
+                )
                 自动打卡.Sendmail.Sendmail().sendSucceedMail(self.Email, self.Name)
             else:
-                # 首先更新token，然后再次尝试打卡
+                print(
+                    f"[{datetime.now().strftime('%Y-%m-%d  %H:%M:%S')}] {self.Name}: 首次打卡响应异常，尝试刷新Token后重试..."
+                )
                 if self.DuplicateToken():
                     response = self.RTS()
-                    if (response and response.json().get("Data") == "打卡成功"
-                            and response.json().get("Description") == "打卡成功"):
-                        # 发送打卡成功邮件
+                    resp_json = None
+                    if response:
+                        try:
+                            resp_json = response.json()
+                            print(
+                                f"[{datetime.now().strftime('%Y-%m-%d  %H:%M:%S')}] {self.Name}: 重试服务器响应: {response.text}"
+                            )
+                        except Exception:
+                            pass
+                    
+                    retry_success = False
+                    if resp_json:
+                        desc = str(resp_json.get("Description", ""))
+                        data_val = str(resp_json.get("Data", ""))
+                        if "打卡成功" in desc or "打卡成功" in data_val or "成功" in desc:
+                            retry_success = True
+
+                    if retry_success:
+                        print(
+                            f"[{datetime.now().strftime('%Y-%m-%d  %H:%M:%S')}] {self.Name}: 重试打卡成功！"
+                        )
                         自动打卡.Sendmail.Sendmail().sendSucceedMail(
                             self.Email, self.Name)
                     else:
-                        # 发送打卡失败邮件
+                        print(
+                            f"[{datetime.now().strftime('%Y-%m-%d  %H:%M:%S')}] {self.Name}: 打卡失败: {resp_json}"
+                        )
                         自动打卡.Sendmail.Sendmail().sendFailMail(
                             self.Email, self.Name)
             # 输出主流程完成的日志
