@@ -134,6 +134,7 @@ dmypy.json
 Thumbs.db
 
 # 项目特定的忽略文件
-自动打卡/Tokens/*.json
+自动打卡/Tokens/*
+自动打卡/Tokens/.*
 !自动打卡/Tokens/example.json
 config.json

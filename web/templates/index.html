@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>TaskForge 控制台 - 任务调度与自动打卡</title>
+  <title>TaskForge - 接龙管家个人自动打卡工作站</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -12,16 +12,17 @@
       --bg-dark: #0a0e17;
       --card-bg: rgba(18, 24, 38, 0.85);
       --card-border: rgba(255, 255, 255, 0.08);
+      --card-border-active: rgba(59, 130, 246, 0.6);
       --primary: #3b82f6;
       --primary-hover: #2563eb;
-      --primary-glow: rgba(59, 130, 246, 0.25);
+      --primary-glow: rgba(59, 130, 246, 0.35);
       --success: #10b981;
-      --success-glow: rgba(16, 185, 129, 0.2);
+      --success-glow: rgba(16, 185, 129, 0.25);
       --warning: #f59e0b;
       --danger: #ef4444;
       --text-main: #f3f4f6;
-      --text-muted: #9ca3af;
-      --font-sans: 'Outfit', -apple-system, BlinkMacSystemFont, sans-serif;
+      --text-muted: #94a3b8;
+      --font-sans: 'Outfit', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
       --font-mono: 'JetBrains Mono', monospace;
     }
 
@@ -30,8 +31,8 @@
     body {
       background-color: var(--bg-dark);
       background-image: 
-        radial-gradient(at 0% 0%, rgba(59, 130, 246, 0.12) 0px, transparent 50%),
-        radial-gradient(at 100% 100%, rgba(16, 185, 129, 0.08) 0px, transparent 50%);
+        radial-gradient(at 0% 0%, rgba(59, 130, 246, 0.15) 0px, transparent 45%),
+        radial-gradient(at 100% 100%, rgba(16, 185, 129, 0.1) 0px, transparent 45%);
       background-attachment: fixed;
       color: var(--text-main);
       font-family: var(--font-sans);
@@ -43,20 +44,19 @@
     /* 顶部导航 */
     header {
       backdrop-filter: blur(16px);
-      background: rgba(10, 14, 23, 0.8);
+      background: rgba(10, 14, 23, 0.85);
       border-bottom: 1px solid var(--card-border);
       position: sticky;
       top: 0;
       z-index: 50;
     }
     .nav-inner {
-      max-width: 1200px;
+      max-width: 1100px;
       margin: 0 auto;
       padding: 1rem 1.5rem;
       display: flex;
       justify-content: space-between;
       align-items: center;
-      flex-wrap: wrap;
       gap: 1rem;
     }
     .brand {
@@ -68,35 +68,41 @@
       letter-spacing: -0.02em;
     }
     .brand-icon {
-      width: 34px;
-      height: 34px;
+      width: 36px;
+      height: 36px;
       background: linear-gradient(135deg, #3b82f6, #8b5cf6);
       border-radius: 10px;
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 1.1rem;
+      font-size: 1.2rem;
       box-shadow: 0 4px 14px var(--primary-glow);
     }
-    .header-status {
+    .header-right {
       display: flex;
       align-items: center;
       gap: 1rem;
-      font-size: 0.875rem;
-      color: var(--text-muted);
     }
     .status-badge {
       display: inline-flex;
       align-items: center;
-      gap: 0.4rem;
-      padding: 0.35rem 0.75rem;
+      gap: 0.45rem;
+      padding: 0.35rem 0.85rem;
       border-radius: 9999px;
-      background: rgba(16, 185, 129, 0.1);
-      color: var(--success);
-      border: 1px solid rgba(16, 185, 129, 0.2);
+      font-size: 0.85rem;
+      font-weight: 500;
     }
-    .status-badge.dot::before {
-      content: "";
+    .badge-online {
+      background: rgba(16, 185, 129, 0.12);
+      color: var(--success);
+      border: 1px solid rgba(16, 185, 129, 0.25);
+    }
+    .badge-offline {
+      background: rgba(245, 158, 11, 0.12);
+      color: var(--warning);
+      border: 1px solid rgba(245, 158, 11, 0.25);
+    }
+    .dot-pulse {
       width: 7px;
       height: 7px;
       border-radius: 50%;
@@ -104,346 +110,486 @@
       box-shadow: 0 0 8px currentColor;
     }
 
-    /* 主容器 */
+    /* 主布局 */
     main {
-      max-width: 1200px;
+      max-width: 1100px;
       margin: 0 auto;
       padding: 2rem 1.5rem;
       flex: 1;
       width: 100%;
+      display: flex;
+      flex-direction: column;
+      gap: 2rem;
     }
 
-    /* 顶部动作统计栏 */
-    .hero-stats {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-      gap: 1.25rem;
-      margin-bottom: 2rem;
-    }
-    .stat-card {
+    /* 流程卡片 */
+    .step-card {
       background: var(--card-bg);
       border: 1px solid var(--card-border);
-      border-radius: 16px;
-      padding: 1.25rem 1.5rem;
+      border-radius: 20px;
+      padding: 1.75rem;
       backdrop-filter: blur(12px);
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+      position: relative;
+      transition: border-color 0.3s ease;
     }
-    .stat-title {
-      font-size: 0.85rem;
-      color: var(--text-muted);
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-      margin-bottom: 0.5rem;
+    .step-card:hover {
+      border-color: rgba(255, 255, 255, 0.14);
     }
-    .stat-val {
-      font-size: 1.6rem;
-      font-weight: 700;
-      color: #fff;
-    }
-
-    /* 通用按钮 */
-    .btn {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      gap: 0.5rem;
-      padding: 0.65rem 1.25rem;
-      border-radius: 10px;
-      font-size: 0.9rem;
-      font-weight: 600;
-      cursor: pointer;
-      transition: all 0.2s ease;
-      border: none;
-      outline: none;
-      text-decoration: none;
-    }
-    .btn-primary {
-      background: linear-gradient(135deg, var(--primary), var(--primary-hover));
-      color: #fff;
-      box-shadow: 0 4px 12px var(--primary-glow);
-    }
-    .btn-primary:hover {
-      transform: translateY(-1px);
-      box-shadow: 0 6px 18px var(--primary-glow);
-    }
-    .btn-outline {
-      background: rgba(255, 255, 255, 0.04);
-      color: var(--text-main);
-      border: 1px solid var(--card-border);
-    }
-    .btn-outline:hover {
-      background: rgba(255, 255, 255, 0.08);
-      border-color: rgba(255, 255, 255, 0.2);
-    }
-    .btn-success {
-      background: rgba(16, 185, 129, 0.15);
-      color: var(--success);
-      border: 1px solid rgba(16, 185, 129, 0.3);
-    }
-    .btn-success:hover {
-      background: rgba(16, 185, 129, 0.25);
-    }
-    .btn-danger {
-      background: rgba(239, 68, 68, 0.12);
-      color: var(--danger);
-      border: 1px solid rgba(239, 68, 68, 0.25);
-    }
-    .btn-danger:hover {
-      background: rgba(239, 68, 68, 0.2);
-    }
-    .btn-sm {
-      padding: 0.4rem 0.75rem;
-      font-size: 0.8rem;
-      border-radius: 8px;
-    }
-
-    /* 区域标题栏 */
-    .section-header {
+    .step-header {
       display: flex;
       justify-content: space-between;
       align-items: center;
       margin-bottom: 1.25rem;
       flex-wrap: wrap;
-      gap: 1rem;
-    }
-    .section-title {
-      font-size: 1.25rem;
-      font-weight: 700;
-      letter-spacing: -0.01em;
-    }
-    .action-group {
-      display: flex;
       gap: 0.75rem;
     }
-
-    /* 用户卡片列表 */
-    .users-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-      gap: 1.25rem;
-      margin-bottom: 2.5rem;
-    }
-    .user-card {
-      background: var(--card-bg);
-      border: 1px solid var(--card-border);
-      border-radius: 16px;
-      padding: 1.5rem;
-      backdrop-filter: blur(12px);
-      transition: all 0.25s ease;
-      display: flex;
-      flex-direction: column;
-      justify-content: space-between;
-    }
-    .user-card:hover {
-      border-color: rgba(59, 130, 246, 0.4);
-      transform: translateY(-3px);
-      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.35);
-    }
-    .user-top {
-      display: flex;
-      justify-content: space-between;
-      align-items: flex-start;
-      margin-bottom: 1rem;
-    }
-    .user-name {
-      font-size: 1.25rem;
-      font-weight: 700;
+    .step-title-wrap {
       display: flex;
       align-items: center;
-      gap: 0.5rem;
+      gap: 0.85rem;
     }
-    .tag-badge {
-      font-size: 0.75rem;
-      padding: 0.2rem 0.55rem;
-      border-radius: 6px;
-      font-weight: 600;
-    }
-    .tag-token-ok {
-      background: rgba(16, 185, 129, 0.15);
-      color: var(--success);
-      border: 1px solid rgba(16, 185, 129, 0.3);
-    }
-    .tag-token-missing {
-      background: rgba(245, 158, 11, 0.15);
-      color: var(--warning);
-      border: 1px solid rgba(245, 158, 11, 0.3);
-    }
-    .user-info-row {
+    .step-number {
+      width: 32px;
+      height: 32px;
+      border-radius: 8px;
+      background: rgba(59, 130, 246, 0.2);
+      color: var(--primary);
       display: flex;
-      margin-bottom: 0.5rem;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 0.95rem;
+      border: 1px solid rgba(59, 130, 246, 0.35);
+    }
+    .step-title {
+      font-size: 1.25rem;
+      font-weight: 700;
+    }
+    .step-desc {
       font-size: 0.875rem;
-      line-height: 1.4;
-    }
-    .info-label {
       color: var(--text-muted);
-      width: 85px;
-      flex-shrink: 0;
+      margin-top: 0.2rem;
     }
-    .info-val {
-      color: #e5e7eb;
-      word-break: break-all;
-    }
-    .user-actions {
-      display: flex;
+
+    /* 按钮规范 */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
       gap: 0.5rem;
-      margin-top: 1.25rem;
-      padding-top: 1rem;
-      border-top: 1px solid rgba(255, 255, 255, 0.05);
-      flex-wrap: wrap;
-    }
-
-    /* 日志控制台面板 */
-    .log-panel {
-      background: #060910;
-      border: 1px solid var(--card-border);
-      border-radius: 16px;
-      overflow: hidden;
-      margin-bottom: 2rem;
-    }
-    .log-header {
-      padding: 0.85rem 1.25rem;
-      background: rgba(255, 255, 255, 0.02);
-      border-bottom: 1px solid var(--card-border);
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      font-size: 0.85rem;
-      color: var(--text-muted);
-    }
-    .log-content {
-      font-family: var(--font-mono);
-      font-size: 0.825rem;
-      line-height: 1.6;
-      padding: 1.25rem;
-      max-height: 380px;
-      overflow-y: auto;
-      color: #94a3b8;
-      white-space: pre-wrap;
-    }
-    .log-entry { margin-bottom: 0.3rem; }
-    .log-time { color: #64748b; margin-right: 0.6rem; }
-    .log-text { color: #e2e8f0; }
-
-    /* 弹窗遮罩 */
-    .modal-backdrop {
-      position: fixed;
-      inset: 0;
-      background: rgba(0, 0, 0, 0.75);
-      backdrop-filter: blur(8px);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      z-index: 100;
-      opacity: 0;
-      pointer-events: none;
-      transition: all 0.25s ease;
-      padding: 1.5rem;
-    }
-    .modal-backdrop.open {
-      opacity: 1;
-      pointer-events: auto;
-    }
-    .modal-card {
-      background: #111827;
-      border: 1px solid rgba(255, 255, 255, 0.12);
-      border-radius: 20px;
-      width: 100%;
-      max-width: 480px;
-      padding: 2rem;
-      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7);
-      transform: scale(0.95);
-      transition: transform 0.25s ease;
-    }
-    .modal-backdrop.open .modal-card {
-      transform: scale(1);
-    }
-    .modal-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 1.5rem;
-    }
-    .modal-title { font-size: 1.35rem; font-weight: 700; }
-    .modal-close {
-      background: none;
-      border: none;
-      color: var(--text-muted);
-      font-size: 1.5rem;
+      padding: 0.7rem 1.4rem;
+      border-radius: 12px;
+      font-size: 0.92rem;
+      font-weight: 600;
       cursor: pointer;
-    }
-    .modal-close:hover { color: #fff; }
-
-    /* 表单组件 */
-    .form-group {
-      margin-bottom: 1.15rem;
-    }
-    .form-label {
-      display: block;
-      font-size: 0.85rem;
-      color: var(--text-muted);
-      margin-bottom: 0.4rem;
-      font-weight: 500;
-    }
-    .form-input {
-      width: 100%;
-      padding: 0.7rem 1rem;
-      background: rgba(255, 255, 255, 0.05);
-      border: 1px solid rgba(255, 255, 255, 0.1);
-      border-radius: 10px;
-      color: #fff;
-      font-family: inherit;
-      font-size: 0.9rem;
-      transition: border 0.2s;
-    }
-    .form-input:focus {
+      transition: all 0.2s ease;
+      border: none;
       outline: none;
-      border-color: var(--primary);
-      box-shadow: 0 0 0 3px var(--primary-glow);
+      font-family: inherit;
     }
-    .form-row {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 0.75rem;
+    .btn:active { transform: scale(0.98); }
+    .btn-primary {
+      background: linear-gradient(135deg, var(--primary), var(--primary-hover));
+      color: #fff;
+      box-shadow: 0 4px 14px var(--primary-glow);
+    }
+    .btn-primary:hover {
+      box-shadow: 0 6px 20px var(--primary-glow);
+      filter: brightness(1.08);
+    }
+    .btn-success {
+      background: linear-gradient(135deg, #10b981, #059669);
+      color: #fff;
+      box-shadow: 0 4px 14px var(--success-glow);
+    }
+    .btn-success:hover {
+      box-shadow: 0 6px 20px var(--success-glow);
+      filter: brightness(1.08);
+    }
+    .btn-outline {
+      background: rgba(255, 255, 255, 0.05);
+      color: var(--text-main);
+      border: 1px solid var(--card-border);
+    }
+    .btn-outline:hover {
+      background: rgba(255, 255, 255, 0.1);
+      border-color: rgba(255, 255, 255, 0.2);
+    }
+    .btn-danger-outline {
+      background: rgba(239, 68, 68, 0.08);
+      color: var(--danger);
+      border: 1px solid rgba(239, 68, 68, 0.25);
+    }
+    .btn-danger-outline:hover {
+      background: rgba(239, 68, 68, 0.15);
+    }
+    .btn-sm {
+      padding: 0.45rem 0.9rem;
+      font-size: 0.82rem;
+      border-radius: 8px;
     }
 
-    /* 二维码展示区 */
+    /* Step 1: 扫码登录区域 */
     .qr-container {
-      text-align: center;
-      padding: 1rem 0;
+      display: flex;
+      align-items: center;
+      gap: 2.5rem;
+      flex-wrap: wrap;
+      padding: 0.5rem 0;
     }
-    .qr-img-box {
-      width: 240px;
-      height: 240px;
-      margin: 0 auto 1.25rem;
-      background: #fff;
+    .qr-box {
+      width: 210px;
+      height: 210px;
       border-radius: 16px;
-      padding: 12px;
-      box-shadow: 0 8px 30px rgba(0, 0, 0, 0.4);
+      background: #fff;
+      padding: 10px;
       display: flex;
       align-items: center;
       justify-content: center;
+      position: relative;
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.4);
+      border: 2px solid rgba(255, 255, 255, 0.2);
     }
-    .qr-img-box img {
+    .qr-box img {
       width: 100%;
       height: 100%;
       object-fit: contain;
+      border-radius: 8px;
     }
-    .qr-status-text {
+    .qr-loading {
+      color: #0f172a;
+      font-size: 0.85rem;
+      text-align: center;
+      padding: 1rem;
+    }
+    .qr-info {
+      flex: 1;
+      min-width: 280px;
+      display: flex;
+      flex-direction: column;
+      gap: 0.85rem;
+    }
+    .qr-status-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.5rem 1rem;
+      border-radius: 10px;
       font-size: 0.95rem;
       font-weight: 600;
-      color: #fff;
-      margin-bottom: 0.5rem;
-    }
-    .qr-subtext {
-      font-size: 0.8rem;
-      color: var(--text-muted);
+      width: fit-content;
+      background: rgba(59, 130, 246, 0.12);
+      color: var(--primary);
+      border: 1px solid rgba(59, 130, 246, 0.25);
     }
 
-    footer {
-      border-top: 1px solid var(--card-border);
-      padding: 1.5rem;
-      text-align: center;
-      font-size: 0.8rem;
+    /* 已登录展示 */
+    .logged-banner {
+      background: rgba(16, 185, 129, 0.08);
+      border: 1px solid rgba(16, 185, 129, 0.25);
+      border-radius: 14px;
+      padding: 1.25rem 1.5rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 1rem;
+    }
+    .logged-left {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+    .logged-avatar {
+      width: 48px;
+      height: 48px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #10b981, #3b82f6);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.4rem;
+    }
+    .logged-title {
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: #fff;
+    }
+    .logged-sub {
+      font-size: 0.85rem;
       color: var(--text-muted);
+      margin-top: 0.15rem;
+    }
+
+    /* Step 2: 收藏接龙列表网格 */
+    .favorites-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(310px, 1fr));
+      gap: 1.25rem;
+      margin-top: 1rem;
+    }
+    .fav-card {
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid var(--card-border);
+      border-radius: 14px;
+      padding: 1.25rem;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      gap: 0.85rem;
+      position: relative;
+    }
+    .fav-card:hover {
+      border-color: rgba(59, 130, 246, 0.4);
+      background: rgba(59, 130, 246, 0.04);
+      transform: translateY(-2px);
+    }
+    .fav-card.selected {
+      border-color: var(--primary);
+      background: rgba(59, 130, 246, 0.1);
+      box-shadow: 0 0 18px var(--primary-glow);
+    }
+    .fav-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 0.5rem;
+    }
+    .fav-title {
+      font-size: 1.05rem;
+      font-weight: 600;
+      line-height: 1.4;
+      color: #fff;
+    }
+    .fav-badge {
+      font-size: 0.75rem;
+      padding: 0.2rem 0.5rem;
+      border-radius: 6px;
+      background: rgba(16, 185, 129, 0.15);
+      color: var(--success);
+      white-space: nowrap;
+    }
+    .fav-meta {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      font-size: 0.82rem;
+      color: var(--text-muted);
+    }
+    .fav-author {
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+    }
+    .fav-author img {
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+    }
+    .fav-select-indicator {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: var(--primary);
+    }
+
+    /* 手动输入折叠栏 */
+    .manual-toggle-bar {
+      margin-top: 1rem;
+      font-size: 0.88rem;
+      color: var(--text-muted);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+      user-select: none;
+    }
+    .manual-toggle-bar:hover { color: var(--text-main); }
+    .manual-box {
+      margin-top: 0.75rem;
+      display: none;
+      background: rgba(255, 255, 255, 0.02);
+      border: 1px dashed var(--card-border);
+      border-radius: 12px;
+      padding: 1rem;
+    }
+
+    /* Step 3: 配置表单 */
+    .form-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 1.25rem;
+    }
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: 0.45rem;
+    }
+    .form-group.full-width {
+      grid-column: 1 / -1;
+    }
+    label {
+      font-size: 0.88rem;
+      font-weight: 600;
+      color: #cbd5e1;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .input-field {
+      width: 100%;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--card-border);
+      border-radius: 10px;
+      padding: 0.75rem 1rem;
+      color: #fff;
+      font-size: 0.95rem;
+      font-family: inherit;
+      outline: none;
+      transition: all 0.2s ease;
+    }
+    .input-field:focus {
+      border-color: var(--primary);
+      background: rgba(59, 130, 246, 0.05);
+      box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+    }
+    .roster-chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      margin-top: 0.4rem;
+    }
+    .roster-chip {
+      padding: 0.35rem 0.75rem;
+      border-radius: 8px;
+      background: rgba(59, 130, 246, 0.1);
+      border: 1px solid rgba(59, 130, 246, 0.25);
+      color: #93c5fd;
+      font-size: 0.85rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+    .roster-chip:hover {
+      background: var(--primary);
+      color: #fff;
+      border-color: var(--primary);
+      transform: translateY(-1px);
+    }
+    .roster-chip.active {
+      background: var(--primary);
+      color: #fff;
+      box-shadow: 0 2px 8px var(--primary-glow);
+    }
+
+    /* 坐标快捷工具栏 */
+    .loc-helper-bar {
+      display: flex;
+      gap: 0.5rem;
+      align-items: center;
+      margin-top: 0.35rem;
+      font-size: 0.82rem;
+    }
+
+    /* 操作按钮栏 */
+    .action-bar {
+      display: flex;
+      justify-content: flex-end;
+      align-items: center;
+      gap: 1rem;
+      margin-top: 1.5rem;
+      padding-top: 1.25rem;
+      border-top: 1px solid var(--card-border);
+      flex-wrap: wrap;
+    }
+
+    /* 控制台日志卡片 */
+    .log-card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 20px;
+      padding: 1.5rem;
+      backdrop-filter: blur(12px);
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+    .log-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+    }
+    .log-title {
+      font-size: 1.15rem;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .terminal-window {
+      background: #050811;
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      border-radius: 12px;
+      padding: 1.2rem;
+      font-family: var(--font-mono);
+      font-size: 0.85rem;
+      height: 320px;
+      overflow-y: auto;
+      color: #cbd5e1;
+      line-height: 1.6;
+      display: flex;
+      flex-direction: column;
+      gap: 0.3rem;
+    }
+    .log-row {
+      display: flex;
+      gap: 0.75rem;
+      word-break: break-all;
+    }
+    .log-time {
+      color: #64748b;
+      flex-shrink: 0;
+    }
+    .log-text-success { color: #34d399; }
+    .log-text-warn { color: #fbbf24; }
+    .log-text-error { color: #f87171; }
+    .log-text-info { color: #93c5fd; }
+
+    /* 调度器状态栏 */
+    .scheduler-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      flex-wrap: wrap;
+      gap: 0.75rem;
+      padding: 0.75rem 1rem;
+      background: rgba(255, 255, 255, 0.02);
+      border-radius: 10px;
+      border: 1px solid var(--card-border);
+    }
+
+    /* 动画 */
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+    .anim-pulse { animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
+
+    /* 响应式 */
+    @media (max-width: 640px) {
+      .qr-container { justify-content: center; text-align: center; }
+      .qr-info { align-items: center; }
+      .action-bar { justify-content: stretch; }
+      .action-bar .btn { flex: 1; }
     }
   </style>
 </head>
@@ -454,467 +600,695 @@
     <div class="nav-inner">
       <div class="brand">
         <div class="brand-icon">⚡</div>
-        <span>TaskForge Dashboard</span>
+        <div>TaskForge</div>
       </div>
-      <div class="header-status">
-        <span class="status-badge dot" id="engineStatus">调度引擎运行中</span>
-        <span id="currentTime">2026-10-10 12:00:00</span>
+      <div class="header-right">
+        <span id="serverTimeText" style="font-family: var(--font-mono); font-size: 0.85rem; color: var(--text-muted);">--:--:--</span>
+        <div id="schedulerStatusBadge" class="status-badge badge-online">
+          <span class="dot-pulse"></span>
+          <span id="schedulerStatusText">调度引擎运行中</span>
+        </div>
       </div>
     </div>
   </header>
 
-  <!-- 主体内容 -->
   <main>
-    <!-- 统计卡片 -->
-    <div class="hero-stats">
-      <div class="stat-card">
-        <div class="stat-title">配置用户数</div>
-        <div class="stat-val" id="statUserCount">0</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-title">下次定时打卡</div>
-        <div class="stat-val" id="statNextRun" style="font-size: 1.15rem; line-height: 2rem;">计算中...</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-title">定时任务累计运行</div>
-        <div class="stat-val" id="statRunCount">0 次</div>
-      </div>
-    </div>
 
-    <!-- 用户管理区域 -->
-    <div class="section-header">
-      <h2 class="section-title">打卡成员管理</h2>
-      <div class="action-group">
-        <button class="btn btn-primary" onclick="openAddUserModal()">➕ 添加用户</button>
-        <button class="btn btn-success" onclick="punchAllUsers()">🚀 立即全员打卡</button>
-        <button class="btn btn-outline" onclick="loadAllData()">🔄 刷新</button>
-      </div>
-    </div>
-
-    <!-- 用户列表卡片容器 -->
-    <div class="users-grid" id="usersContainer">
-      <div style="grid-column: 1/-1; text-align: center; padding: 3rem; color: var(--text-muted);">
-        加载用户配置中...
-      </div>
-    </div>
-
-    <!-- 实时日志面板 -->
-    <div class="section-header">
-      <h2 class="section-title">运行实时日志</h2>
-      <div class="action-group">
-        <button class="btn btn-outline btn-sm" onclick="loadLogs()">刷新日志</button>
-        <button class="btn btn-outline btn-sm" onclick="document.getElementById('logContent').innerHTML=''">清屏</button>
-      </div>
-    </div>
-
-    <div class="log-panel">
-      <div class="log-header">
-        <span>Console Output (标准输出捕获)</span>
-        <span id="logCountText">0 条记录</span>
-      </div>
-      <div class="log-content" id="logContent">
-        <div class="log-entry"><span class="log-time">[System]</span><span class="log-text">等待日志接入...</span></div>
-      </div>
-    </div>
-  </main>
-
-  <footer>
-    TaskForge 任务调度与自动打卡系统 · Docker 容器化部署版
-  </footer>
-
-  <!-- 弹窗 1：编辑/添加用户 -->
-  <div class="modal-backdrop" id="userModal">
-    <div class="modal-card">
-      <div class="modal-header">
-        <h3 class="modal-title" id="userModalTitle">添加用户配置</h3>
-        <button class="modal-close" onclick="closeUserModal()">&times;</button>
-      </div>
-      <form id="userForm" onsubmit="handleSaveUser(event)">
-        <div class="form-group">
-          <label class="form-label">打卡署名姓名（与配置文件同名）*</label>
-          <input type="text" class="form-input" id="inputName" required placeholder="例如：张三">
-        </div>
-        <div class="form-group">
-          <label class="form-label">通知邮箱 (接收二维码与打卡通知) *</label>
-          <input type="email" class="form-input" id="inputEmail" required placeholder="例如：user@qq.com">
-        </div>
-        <div class="form-group">
-          <label class="form-label">接龙 ID 或网页链接 (支持直接粘贴网址如 https://i.jielong.com/c/1WVD88CV8F 或纯数字) *</label>
-          <div style="display: flex; gap: 0.5rem;">
-            <input type="text" class="form-input" id="inputThreadId" required placeholder="例如：187336835 或粘贴网页链接" oninput="debounceResolveThread()">
-            <button type="button" class="btn btn-outline btn-sm" style="flex-shrink: 0;" onclick="autoResolveThread()">🔍 自动解析</button>
+    <!-- STEP 1: 微信扫码授权 -->
+    <section class="step-card" id="step1Card">
+      <div class="step-header">
+        <div class="step-title-wrap">
+          <div class="step-number">1</div>
+          <div>
+            <div class="step-title">微信扫码登录接龙管家</div>
+            <div class="step-desc">使用微信扫描下方二维码，授权系统获取你的接龙打卡权限</div>
           </div>
-          <div id="threadResolveTip" style="font-size: 0.8rem; margin-top: 0.35rem; display: none;"></div>
         </div>
-        <div class="form-group">
-          <label class="form-label">打卡地理位置描述 (界面显示的地址) *</label>
-          <input type="text" class="form-input" id="inputLocText" required placeholder="xx省•xx市•xx区•详细地点">
+        <div id="step1ActionSlot"></div>
+      </div>
+
+      <!-- 未登录时的扫码界面 -->
+      <div id="qrLoginView" class="qr-container">
+        <div class="qr-box">
+          <div id="qrImageBox" class="qr-loading">正在拉取微信二维码...</div>
         </div>
-        <div class="form-row">
+        <div class="qr-info">
+          <div class="qr-status-pill" id="qrStatusPill">
+            <span class="dot-pulse"></span>
+            <span id="qrStatusText">等待扫码...</span>
+          </div>
+          <p style="color: var(--text-muted); font-size: 0.9rem; line-height: 1.5;">
+            请使用手机微信扫描左侧二维码，在微信手机端点击<strong>【允许 / 确认登录】</strong>。<br>
+            授权成功后将自动识别你的接龙管家账户并加载你的收藏表单。
+          </p>
+          <div style="display: flex; gap: 0.75rem;">
+            <button class="btn btn-outline btn-sm" onclick="fetchNewQRCode()">🔄 刷新二维码</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 已登录展示视图 -->
+      <div id="qrLoggedView" style="display: none;">
+        <div class="logged-banner">
+          <div class="logged-left">
+            <div class="logged-avatar">✓</div>
+            <div>
+              <div class="logged-title">已成功授权接龙管家</div>
+              <div class="logged-sub" id="loggedSubText">登录状态有效，已就绪</div>
+            </div>
+          </div>
+          <div style="display: flex; gap: 0.75rem;">
+            <button class="btn btn-outline btn-sm" onclick="handleReAuth()">🔄 重新扫码登录</button>
+            <button class="btn btn-danger-outline btn-sm" onclick="handleLogout()">退出登录</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- STEP 2: 选择收藏的接龙 -->
+    <section class="step-card" id="step2Card">
+      <div class="step-header">
+        <div class="step-title-wrap">
+          <div class="step-number">2</div>
+          <div>
+            <div class="step-title">选择要打卡的接龙表单</div>
+            <div class="step-desc">系统已自动拉取你在接龙管家网站 (i.jielong.com/my-form?tab=5) 收藏的打卡表单</div>
+          </div>
+        </div>
+        <button class="btn btn-outline btn-sm" onclick="loadFavorites(true)">🔄 刷新收藏列表</button>
+      </div>
+
+      <!-- 收藏列表网格 -->
+      <div id="favoritesContainer">
+        <div style="color: var(--text-muted); font-size: 0.9rem; padding: 1.5rem; text-align: center;">
+          ⏳ 正在加载收藏的接龙列表...
+        </div>
+      </div>
+
+      <!-- 手动输入备用折叠栏 -->
+      <div class="manual-toggle-bar" onclick="toggleManualInput()">
+        <span id="manualToggleArrow">▶</span> 找不到收藏？点击手动输入接龙链接或 ThreadId
+      </div>
+      <div class="manual-box" id="manualInputBox">
+        <div style="display: flex; gap: 0.75rem; flex-wrap: wrap;">
+          <input type="text" id="manualThreadQuery" class="input-field" style="flex: 1; min-width: 240px;" placeholder="粘贴网址如 https://i.jielong.com/c/1WVD88CV8F 或纯数字 ThreadId">
+          <button class="btn btn-outline" onclick="handleManualResolve()">解析接龙</button>
+        </div>
+        <div id="manualResolveTip" style="font-size: 0.85rem; margin-top: 0.5rem; display: none;"></div>
+      </div>
+    </section>
+
+    <!-- STEP 3: 设置签到信息 -->
+    <section class="step-card" id="step3Card">
+      <div class="step-header">
+        <div class="step-title-wrap">
+          <div class="step-number">3</div>
+          <div>
+            <div class="step-title">配置打卡签到参数</div>
+            <div class="step-desc">设置你的签到姓名、地理位置经纬度与详细地址</div>
+          </div>
+        </div>
+        <div id="selectedThreadBadge" style="display: none;" class="status-badge badge-online">
+          已选接龙: <strong id="selectedThreadTitle" style="margin-left: 0.3rem;">未选择</strong>
+        </div>
+      </div>
+
+      <form id="punchConfigForm" onsubmit="handleSaveConfig(event)">
+        <input type="hidden" id="configThreadId" value="0">
+
+        <div class="form-grid">
+          <!-- 签到姓名与花名册选择 -->
+          <div class="form-group full-width">
+            <label>
+              <span>打卡签到姓名 <span style="color: var(--danger);">*</span></span>
+              <span style="font-size: 0.8rem; font-weight: normal; color: var(--text-muted);">必须与接龙打卡名单/花名册中的名字完全一致</span>
+            </label>
+            <input type="text" id="configName" class="input-field" placeholder="例如：李桂涛" required>
+            
+            <!-- 花名册快捷点击标签 -->
+            <div id="rosterBlock" style="display: none; margin-top: 0.5rem;">
+              <span style="font-size: 0.82rem; color: #94a3b8;">📋 该接龙花名册包含以下名字（点击直接填入）：</span>
+              <div class="roster-chips" id="rosterChips"></div>
+            </div>
+          </div>
+
+          <!-- 详细地址 -->
+          <div class="form-group full-width">
+            <label>
+              <span>打卡详细地址 (Location Text) <span style="color: var(--danger);">*</span></span>
+              <span style="font-size: 0.8rem; font-weight: normal; color: var(--text-muted);">展示在打卡记录中的文本地址</span>
+            </label>
+            <input type="text" id="configLocationText" class="input-field" placeholder="例如：广东省广州市海珠区新港中路397号" required>
+          </div>
+
+          <!-- 经纬度坐标 -->
           <div class="form-group">
-            <label class="form-label">纬度 (Latitude) *</label>
-            <input type="number" step="any" class="form-input" id="inputLat" required placeholder="39.908722">
+            <label>纬度 (Latitude) <span style="color: var(--danger);">*</span></label>
+            <input type="number" step="any" id="configLatitude" class="input-field" placeholder="例如：23.099994" required>
           </div>
+
           <div class="form-group">
-            <label class="form-label">经度 (Longitude) *</label>
-            <input type="number" step="any" class="form-input" id="inputLng" required placeholder="116.397496">
+            <label>经度 (Longitude) <span style="color: var(--danger);">*</span></label>
+            <input type="number" step="any" id="configLongitude" class="input-field" placeholder="例如：113.324520" required>
+          </div>
+
+          <!-- 辅助定位按钮 -->
+          <div class="form-group full-width">
+            <div class="loc-helper-bar">
+              <button type="button" class="btn btn-outline btn-sm" onclick="detectBrowserLocation()">📍 获取当前设备 GPS 定位</button>
+              <button type="button" class="btn btn-outline btn-sm" onclick="setPresetLocation('广州塔', 23.10647, 113.32446, '广东省广州市海珠区阅江西路222号')">🏢 示例坐标</button>
+              <span id="locStatusText" style="color: var(--text-muted);"></span>
+            </div>
+          </div>
+
+          <!-- 通知邮箱（可选） -->
+          <div class="form-group full-width">
+            <label>
+              <span>结果通知邮箱 (Email)</span>
+              <span style="font-size: 0.8rem; font-weight: normal; color: var(--text-muted);">可选，若未配置 SMTP 可留空</span>
+            </label>
+            <input type="email" id="configEmail" class="input-field" placeholder="例如：user@example.com (可留空)">
           </div>
         </div>
-        <div style="display: flex; justify-content: flex-end; gap: 0.75rem; margin-top: 1.5rem;">
-          <button type="button" class="btn btn-outline" onclick="closeUserModal()">取消</button>
-          <button type="submit" class="btn btn-primary">保存配置</button>
+
+        <!-- 动作操作栏 -->
+        <div class="action-bar">
+          <span id="saveStatusTip" style="font-size: 0.9rem; color: var(--text-muted); margin-right: auto;"></span>
+          <button type="submit" class="btn btn-primary" id="btnSaveConfig">💾 保存打卡配置</button>
+          <button type="button" class="btn btn-success" id="btnPunchTest" onclick="handleTestPunch()">🚀 立即测试打卡</button>
         </div>
       </form>
-    </div>
-  </div>
+    </section>
 
-  <!-- 弹窗 2：微信扫码授权 -->
-  <div class="modal-backdrop" id="qrModal">
-    <div class="modal-card" style="text-align: center;">
-      <div class="modal-header">
-        <h3 class="modal-title">微信扫码授权</h3>
-        <button class="modal-close" onclick="closeQrModal()">&times;</button>
-      </div>
-      <div class="qr-container">
-        <div class="qr-img-box" id="qrImageBox">
-          <span style="color: #64748b; font-size: 0.9rem;">正在生成微信二维码...</span>
+    <!-- 调度器状态与实时日志监控 -->
+    <section class="log-card">
+      <div class="log-header">
+        <div class="log-title">
+          <span>🖥️</span> 实时运行日志
         </div>
-        <div class="qr-status-text" id="qrStatusText">等待扫码中...</div>
-        <div class="qr-subtext" id="qrSubText">请用微信扫描上方二维码完成授权</div>
+        <div style="display: flex; gap: 0.75rem; align-items: center;">
+          <label style="font-size: 0.82rem; font-weight: normal; color: var(--text-muted); cursor: pointer;">
+            <input type="checkbox" id="autoScrollCheck" checked style="vertical-align: middle;"> 自动滚屏
+          </label>
+          <button class="btn btn-outline btn-sm" onclick="loadLogs(true)">刷新日志</button>
+          <button class="btn btn-outline btn-sm" onclick="clearLogsView()">清空视图</button>
+        </div>
       </div>
-      <div style="margin-top: 1.5rem;">
-        <button class="btn btn-outline" onclick="closeQrModal()">关闭窗口</button>
+
+      <div class="terminal-window" id="terminalWindow">
+        <div class="log-row"><span class="log-time">[System]</span> 正在建立实时日志连接...</div>
       </div>
-    </div>
-  </div>
+
+      <div class="scheduler-bar">
+        <div>🕒 调度状态: <strong id="schedDetailText" style="color: #fff;">每天定时执行</strong></div>
+        <div>下一次触发时间: <strong id="nextRunTimeText" style="color: var(--primary);">--</strong></div>
+      </div>
+    </section>
+
+  </main>
 
   <script>
-    let pollTimer = null;
+    let pollQrTimer = null;
+    let selectedThreadData = null;
+    let currentFavorites = [];
 
-    async function loadAllData() {
-      await Promise.all([loadStatus(), loadUsers(), loadLogs()]);
-    }
+    // --- 页面初始化 ---
+    document.addEventListener('DOMContentLoaded', async () => {
+      await loadAppConfig();
+      await loadStatus();
+      await loadLogs();
 
-    async function loadStatus() {
+      // 定时轮询
+      setInterval(loadStatus, 10000);
+      setInterval(loadLogs, 5000);
+    });
+
+    // --- 加载当前用户配置与登录状态 ---
+    async function loadAppConfig() {
       try {
-        const res = await fetch('/api/status');
+        const res = await fetch('/api/config');
         const data = await res.json();
-        document.getElementById('currentTime').textContent = data.server_time;
-        document.getElementById('statUserCount').textContent = data.total_users;
 
-        if (data.tasks && data.tasks.length > 0) {
-          const task = data.tasks[0];
-          document.getElementById('statNextRun').textContent = task.next_run_time || '未排期';
-          document.getElementById('statRunCount').textContent = `${task.count || 0} 次`;
+        if (data.logged_in) {
+          // 已登录
+          showLoggedView(data.token_preview);
+          await loadFavorites();
+        } else {
+          // 未登录，拉取微信二维码
+          showQrLoginView();
+          fetchNewQRCode();
         }
-      } catch (e) {
-        console.error('加载状态异常', e);
+
+        // 如果已经保存过用户配置，自动回显到表单
+        if (data.has_config) {
+          document.getElementById('configName').value = data.name || '';
+          document.getElementById('configEmail').value = data.email || '';
+          document.getElementById('configThreadId').value = data.thread_id || 0;
+          document.getElementById('configLocationText').value = data.location_text || '';
+          document.getElementById('configLatitude').value = data.latitude || 23.099994;
+          document.getElementById('configLongitude').value = data.longitude || 113.324520;
+
+          if (data.thread_id) {
+            fetchThreadDetail(data.thread_id, false);
+          }
+        }
+      } catch (err) {
+        console.error('加载应用配置失败:', err);
       }
     }
 
-    async function loadUsers() {
-      try {
-        const res = await fetch('/api/users');
-        const users = await res.json();
-        const container = document.getElementById('usersContainer');
+    // --- 视图切换 ---
+    function showQrLoginView() {
+      document.getElementById('qrLoginView').style.display = 'flex';
+      document.getElementById('qrLoggedView').style.display = 'none';
+    }
 
-        if (!users || users.length === 0) {
+    function showLoggedView(tokenPreview) {
+      document.getElementById('qrLoginView').style.display = 'none';
+      document.getElementById('qrLoggedView').style.display = 'block';
+      if (tokenPreview) {
+        document.getElementById('loggedSubText').textContent = `Token 凭证有效 (${tokenPreview})`;
+      }
+    }
+
+    // --- 微信授权二维码逻辑 ---
+    async function fetchNewQRCode() {
+      if (pollQrTimer) clearInterval(pollQrTimer);
+      const box = document.getElementById('qrImageBox');
+      const statusText = document.getElementById('qrStatusText');
+      box.innerHTML = '<div class="qr-loading">正在拉取微信二维码...</div>';
+      statusText.textContent = '获取二维码中...';
+
+      try {
+        const res = await fetch('/api/auth/start-qr', { method: 'POST' });
+        const data = await res.json();
+        if (data.success && data.uuid) {
+          box.innerHTML = `<img src="${data.qr_url}" alt="微信授权二维码">`;
+          statusText.textContent = '等待微信扫码...';
+
+          // 开启轮询状态
+          startPollingQr(data.uuid);
+        } else {
+          box.innerHTML = '<div class="qr-loading" style="color: #ef4444;">获取二维码失败</div>';
+          statusText.textContent = '请求失败，请重试';
+        }
+      } catch (err) {
+        box.innerHTML = `<div class="qr-loading" style="color: #ef4444;">网络请求出错: ${err.message}</div>`;
+      }
+    }
+
+    function startPollingQr(uuid) {
+      if (pollQrTimer) clearInterval(pollQrTimer);
+      pollQrTimer = setInterval(async () => {
+        try {
+          const res = await fetch(`/api/auth/poll-qr?uuid=${encodeURIComponent(uuid)}`);
+          const data = await res.json();
+
+          const statusText = document.getElementById('qrStatusText');
+          statusText.textContent = data.message;
+
+          if (data.status === 'scanned') {
+            document.getElementById('qrStatusPill').style.borderColor = 'var(--primary)';
+          } else if (data.status === 'success') {
+            clearInterval(pollQrTimer);
+            document.getElementById('qrStatusPill').style.borderColor = 'var(--success)';
+            statusText.textContent = '🎉 授权成功！正在加载...';
+            setTimeout(async () => {
+              showLoggedView(data.token ? data.token.slice(0, 10) + '...' : '');
+              await loadFavorites(true);
+            }, 1200);
+          } else if (data.status === 'expired') {
+            clearInterval(pollQrTimer);
+            statusText.textContent = '二维码已失效，请点击刷新';
+          }
+        } catch (e) {
+          console.error('轮询二维码状态出错:', e);
+        }
+      }, 3000);
+    }
+
+    function handleReAuth() {
+      showQrLoginView();
+      fetchNewQRCode();
+    }
+
+    async function handleLogout() {
+      if (!confirm('确定要退出当前微信账号登录吗？')) return;
+      try {
+        await fetch('/api/logout', { method: 'POST' });
+        showQrLoginView();
+        fetchNewQRCode();
+        document.getElementById('favoritesContainer').innerHTML = '<div style="color: var(--text-muted); font-size: 0.9rem; padding: 1.5rem; text-align: center;">请先扫码登录后查看收藏的接龙</div>';
+      } catch (e) {
+        alert('退出失败: ' + e);
+      }
+    }
+
+    // --- 加载收藏的接龙 (my-form?tab=5) ---
+    async function loadFavorites(forceNotice = false) {
+      const container = document.getElementById('favoritesContainer');
+      container.innerHTML = '<div style="color: var(--text-muted); font-size: 0.9rem; padding: 1.5rem; text-align: center;">⏳ 正在从接龙管家官网拉取收藏表单...</div>';
+
+      try {
+        const res = await fetch('/api/favorites');
+        const data = await res.json();
+
+        if (!data.logged_in) {
+          container.innerHTML = `<div style="color: var(--warning); padding: 1.5rem; text-align: center;">⚠️ ${data.error || '未登录'}，请先在上方扫码登录微信</div>`;
+          return;
+        }
+
+        if (!data.success) {
+          container.innerHTML = `<div style="color: var(--danger); padding: 1.5rem; text-align: center;">❌ ${data.error || '获取失败'}</div>`;
+          return;
+        }
+
+        currentFavorites = data.items || [];
+        if (currentFavorites.length === 0) {
           container.innerHTML = `
-            <div style="grid-column: 1/-1; text-align: center; padding: 3rem; background: var(--card-bg); border-radius: 16px; border: 1px dashed var(--card-border);">
-              <p style="color: var(--text-muted); margin-bottom: 1rem;">暂无打卡用户配置</p>
-              <button class="btn btn-primary btn-sm" onclick="openAddUserModal()">点击添加第一个用户</button>
+            <div style="background: rgba(255,255,255,0.02); border: 1px dashed var(--card-border); border-radius: 12px; padding: 1.5rem; text-align: center; color: var(--text-muted);">
+              <p>📭 暂未在接龙管家检测到收藏的接龙表单</p>
+              <p style="font-size: 0.85rem; margin-top: 0.5rem;">你可以在微信接龙中点击【收藏】，或在下方展开【手动输入接龙链接或ID】快速设定</p>
             </div>
           `;
           return;
         }
 
-        container.innerHTML = users.map(u => `
-          <div class="user-card">
-            <div>
-              <div class="user-top">
-                <div class="user-name">
-                  <span>${u.name}</span>
-                </div>
-                <span class="tag-badge ${u.has_token ? 'tag-token-ok' : 'tag-token-missing'}">
-                  ${u.has_token ? '● Token 已就绪' : '○ 需重新扫码'}
-                </span>
-              </div>
-              <div class="user-info-row">
-                <span class="info-label">接收邮箱:</span>
-                <span class="info-val">${u.email || '-'}</span>
-              </div>
-              <div class="user-info-row">
-                <span class="info-label">接龙 ID:</span>
-                <span class="info-val">${u.thread_id || '-'}</span>
-              </div>
-              <div class="user-info-row">
-                <span class="info-label">打卡位置:</span>
-                <span class="info-val">${u.location_text || '-'}</span>
-              </div>
-              <div class="user-info-row">
-                <span class="info-label">坐标 (经纬):</span>
-                <span class="info-val">${u.latitude}, ${u.longitude}</span>
-              </div>
-            </div>
+        const currentSelectedId = parseInt(document.getElementById('configThreadId').value) || 0;
+        let html = '<div class="favorites-grid">';
+        currentFavorites.forEach(item => {
+          const isSelected = item.id === currentSelectedId;
+          const statusText = item.is_end ? '已截止' : '打卡进行中';
+          const badgeClass = item.is_end ? 'style="background: rgba(239,68,68,0.15); color: #f87171;"' : '';
 
-            <div class="user-actions">
-              <button class="btn btn-primary btn-sm" onclick="startQrAuth('${u.name}')">📱 扫码授权</button>
-              <button class="btn btn-success btn-sm" onclick="punchUser('${u.name}')">🚀 立即打卡</button>
-              <button class="btn btn-outline btn-sm" onclick='editUser(${JSON.stringify(u)})'>✏️ 编辑</button>
-              <button class="btn btn-danger btn-sm" onclick="deleteUser('${u.name}')">🗑️ 删除</button>
+          html += `
+            <div class="fav-card ${isSelected ? 'selected' : ''}" onclick="selectFavoriteThread(${item.id})">
+              <div class="fav-top">
+                <div class="fav-title">${escapeHtml(item.subject)}</div>
+                <div class="fav-badge" ${badgeClass}>${statusText}</div>
+              </div>
+              <div class="fav-meta">
+                <div class="fav-author">
+                  ${item.avatar ? `<img src="${item.avatar}">` : '👤'}
+                  <span>${escapeHtml(item.author || '发起人')}</span>
+                </div>
+                <div>ID: ${item.id}</div>
+              </div>
+              <div class="fav-select-indicator">
+                ${isSelected ? '✓ 当前已选中' : '点击选择此接龙 →'}
+              </div>
             </div>
-          </div>
-        `).join('');
-      } catch (e) {
-        console.error('加载用户失败', e);
+          `;
+        });
+        html += '</div>';
+        container.innerHTML = html;
+
+        if (forceNotice) {
+          showSaveTip('已成功刷新收藏列表', '#10b981');
+        }
+
+      } catch (err) {
+        container.innerHTML = `<div style="color: var(--danger); padding: 1.5rem; text-align: center;">请求异常: ${err.message}</div>`;
       }
     }
 
-    async function loadLogs() {
-      try {
-        const res = await fetch('/api/logs');
-        const logs = await res.json();
-        const logBox = document.getElementById('logContent');
-        document.getElementById('logCountText').textContent = `${logs.length} 条记录`;
+    // --- 选择收藏的接龙 ---
+    async function selectFavoriteThread(threadId) {
+      document.getElementById('configThreadId').value = threadId;
 
-        if (logs.length > 0) {
-          logBox.innerHTML = logs.map(l => `
-            <div class="log-entry">
-              <span class="log-time">[${l.time}]</span>
-              <span class="log-text">${escapeHtml(l.text)}</span>
-            </div>
-          `).join('');
-          logBox.scrollTop = logBox.scrollHeight;
+      // 更新选中状态 UI
+      document.querySelectorAll('.fav-card').forEach(el => el.classList.remove('selected'));
+      document.querySelectorAll('.fav-select-indicator').forEach(el => el.textContent = '点击选择此接龙 →');
+
+      event.currentTarget.classList.add('selected');
+      const ind = event.currentTarget.querySelector('.fav-select-indicator');
+      if (ind) ind.textContent = '✓ 当前已选中';
+
+      await fetchThreadDetail(threadId, true);
+    }
+
+    // --- 获取指定接龙详情与花名册 ---
+    async function fetchThreadDetail(threadId, autoScrollToStep3 = false) {
+      try {
+        const res = await fetch(`/api/thread-detail?thread_id=${threadId}`);
+        const data = await res.json();
+        if (data.success) {
+          selectedThreadData = data;
+          document.getElementById('selectedThreadBadge').style.display = 'inline-flex';
+          document.getElementById('selectedThreadTitle').textContent = `【${data.subject}】(ID: ${data.thread_id})`;
+
+          // 渲染花名册
+          const rosterBlock = document.getElementById('rosterBlock');
+          const rosterChips = document.getElementById('rosterChips');
+          if (data.name_range && data.name_range.length > 0) {
+            rosterBlock.style.display = 'block';
+            let chipsHtml = '';
+            const currentName = document.getElementById('configName').value.trim();
+            data.name_range.forEach(name => {
+              const active = name === currentName ? 'active' : '';
+              chipsHtml += `<span class="roster-chip ${active}" onclick="pickRosterName('${escapeHtml(name)}')">${escapeHtml(name)}</span>`;
+            });
+            rosterChips.innerHTML = chipsHtml;
+          } else {
+            rosterBlock.style.display = 'none';
+          }
+
+          if (autoScrollToStep3) {
+            document.getElementById('step3Card').scrollIntoView({ behavior: 'smooth' });
+          }
         }
       } catch (e) {
-        console.error('加载日志失败', e);
+        console.error('获取接龙详情失败:', e);
       }
     }
 
-    let resolveDebounceTimer = null;
-    function debounceResolveThread() {
-      if (resolveDebounceTimer) clearTimeout(resolveDebounceTimer);
-      resolveDebounceTimer = setTimeout(autoResolveThread, 400);
+    // 快捷选定花名册姓名
+    function pickRosterName(name) {
+      document.getElementById('configName').value = name;
+      document.querySelectorAll('.roster-chip').forEach(el => {
+        if (el.textContent === name) el.classList.add('active');
+        else el.classList.remove('active');
+      });
+      showSaveTip(`已选择姓名：${name}`, '#93c5fd');
     }
 
-    async function autoResolveThread() {
-      const val = document.getElementById('inputThreadId').value.trim();
-      const tip = document.getElementById('threadResolveTip');
-      if (!val) {
-        tip.style.display = 'none';
-        return;
+    // --- 手动解析接龙 ---
+    function toggleManualInput() {
+      const box = document.getElementById('manualInputBox');
+      const arrow = document.getElementById('manualToggleArrow');
+      if (box.style.display === 'block') {
+        box.style.display = 'none';
+        arrow.textContent = '▶';
+      } else {
+        box.style.display = 'block';
+        arrow.textContent = '▼';
       }
+    }
+
+    async function handleManualResolve() {
+      const val = document.getElementById('manualThreadQuery').value.trim();
+      const tip = document.getElementById('manualResolveTip');
+      if (!val) return;
+
       tip.style.display = 'block';
       tip.style.color = '#94a3b8';
-      tip.textContent = '⏳ 正在向接龙管家接口解析接龙信息...';
+      tip.textContent = '⏳ 正在解析接龙信息...';
 
       try {
         const res = await fetch(`/api/resolve-thread?query=${encodeURIComponent(val)}`);
         const data = await res.json();
         if (data.success && data.thread_id) {
           tip.style.color = '#10b981';
-          tip.textContent = `✅ 已解析到：【${data.subject}】(数字 ID: ${data.thread_id})`;
-          document.getElementById('inputThreadId').dataset.resolvedId = data.thread_id;
+          tip.textContent = `✅ 成功解析到：【${data.subject}】(ID: ${data.thread_id})，已选中！`;
+          document.getElementById('configThreadId').value = data.thread_id;
+          await fetchThreadDetail(data.thread_id, true);
         } else {
-          tip.style.color = '#f59e0b';
-          tip.textContent = data.detail || '⚠️ 解析失败，请输入有效网址或纯数字 ID';
+          tip.style.color = '#ef4444';
+          tip.textContent = data.detail || '⚠️ 解析失败，请检查链接';
         }
       } catch (err) {
         tip.style.color = '#ef4444';
-        tip.textContent = '网络请求失败: ' + err.message;
+        tip.textContent = '网络请求出错: ' + err.message;
       }
     }
 
-    // 保存用户
-    async function handleSaveUser(e) {
-      e.preventDefault();
-      let threadIdVal = document.getElementById('inputThreadId').dataset.resolvedId || document.getElementById('inputThreadId').value.trim();
+    // --- 地理位置辅助工具 ---
+    function detectBrowserLocation() {
+      const tip = document.getElementById('locStatusText');
+      if (!navigator.geolocation) {
+        tip.textContent = '当前浏览器不支持定位接口';
+        tip.style.color = '#ef4444';
+        return;
+      }
+      tip.textContent = '正在获取当前设备 GPS 经纬度...';
+      tip.style.color = '#93c5fd';
 
-      // 如果还是非数字（比如用户直接粘贴网址就点了提交），先自动解析一次
-      if (isNaN(threadIdVal) || !threadIdVal) {
-        try {
-          const res = await fetch(`/api/resolve-thread?query=${encodeURIComponent(document.getElementById('inputThreadId').value.trim())}`);
-          const data = await res.json();
-          if (data.success && data.thread_id) {
-            threadIdVal = data.thread_id;
-          } else {
-            alert('未能解析该接龙，请直接输入纯数字 ThreadId');
-            return;
-          }
-        } catch (err) {
-          alert('解析接龙 ID 出错: ' + err.message);
-          return;
-        }
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          const lat = pos.coords.latitude.toFixed(6);
+          const lng = pos.coords.longitude.toFixed(6);
+          document.getElementById('configLatitude').value = lat;
+          document.getElementById('configLongitude').value = lng;
+          tip.textContent = `✅ 定位成功: 纬度 ${lat}, 经度 ${lng}`;
+          tip.style.color = '#10b981';
+        },
+        (err) => {
+          tip.textContent = `定位失败 (${err.message})，请手动填入经纬度`;
+          tip.style.color = '#ef4444';
+        },
+        { enableHighAccuracy: true, timeout: 8000 }
+      );
+    }
+
+    function setPresetLocation(name, lat, lng, text) {
+      document.getElementById('configLatitude').value = lat;
+      document.getElementById('configLongitude').value = lng;
+      document.getElementById('configLocationText').value = text;
+      showSaveTip(`已填入预设位置：${name}`, '#93c5fd');
+    }
+
+    // --- 保存打卡配置 ---
+    async function handleSaveConfig(e) {
+      e.preventDefault();
+      const threadId = parseInt(document.getElementById('configThreadId').value);
+      if (!threadId) {
+        alert('请先在步骤 2 中选择要打卡的接龙表单！');
+        document.getElementById('step2Card').scrollIntoView({ behavior: 'smooth' });
+        return;
       }
 
       const payload = {
-        name: document.getElementById('inputName').value.trim(),
-        email: document.getElementById('inputEmail').value.trim(),
-        thread_id: parseInt(threadIdVal),
-        location_text: document.getElementById('inputLocText').value.trim(),
-        latitude: parseFloat(document.getElementById('inputLat').value),
-        longitude: parseFloat(document.getElementById('inputLng').value)
+        name: document.getElementById('configName').value.trim(),
+        email: document.getElementById('configEmail').value.trim(),
+        thread_id: threadId,
+        location_text: document.getElementById('configLocationText').value.trim(),
+        latitude: parseFloat(document.getElementById('configLatitude').value),
+        longitude: parseFloat(document.getElementById('configLongitude').value)
       };
 
+      const btn = document.getElementById('btnSaveConfig');
+      btn.disabled = true;
+      btn.textContent = '保存中...';
+
       try {
-        const res = await fetch('/api/users', {
+        const res = await fetch('/api/config', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload)
         });
         const ret = await res.json();
         if (ret.success) {
-          alert('配置已保存成功！');
-          closeUserModal();
-          loadUsers();
-          loadStatus();
+          showSaveTip('✅ 打卡配置已保存成功！', '#10b981');
+          await loadStatus();
         } else {
           alert(ret.detail || '保存失败');
         }
       } catch (err) {
         alert('保存请求错误: ' + err);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = '💾 保存打卡配置';
       }
     }
 
-    // 微信授权流程
-    async function startQrAuth(name) {
-      const qrModal = document.getElementById('qrModal');
-      const box = document.getElementById('qrImageBox');
-      const statusText = document.getElementById('qrStatusText');
-      const subText = document.getElementById('qrSubText');
+    // --- 立即打卡测试 ---
+    async function handleTestPunch() {
+      const name = document.getElementById('configName').value.trim();
+      if (!name) {
+        alert('请先填入或选择签到姓名并保存配置！');
+        return;
+      }
 
-      box.innerHTML = '<span style="color: #64748b;">正在向微信开放平台拉取二维码...</span>';
-      statusText.textContent = '请求授权中...';
-      subText.textContent = '请稍候';
-      qrModal.classList.add('open');
+      if (!confirm(`确定要立即为【${name}】执行一次打卡测试吗？`)) return;
 
-      if (pollTimer) clearInterval(pollTimer);
+      const btn = document.getElementById('btnPunchTest');
+      btn.disabled = true;
+      btn.textContent = '正在触发...';
 
       try {
-        const res = await fetch(`/api/auth/start-qr/${encodeURIComponent(name)}`, { method: 'POST' });
+        const res = await fetch('/api/punch', { method: 'POST' });
+        const data = await res.json();
+        showSaveTip(data.message || '打卡任务已启动', '#34d399');
+        document.querySelector('.log-card').scrollIntoView({ behavior: 'smooth' });
+        setTimeout(loadLogs, 1500);
+      } catch (err) {
+        alert('触发失败: ' + err);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = '🚀 立即测试打卡';
+      }
+    }
+
+    // --- 实时日志流渲染 ---
+    async function loadLogs(notice = false) {
+      try {
+        const res = await fetch('/api/logs');
+        const logs = await res.json();
+        const win = document.getElementById('terminalWindow');
+
+        if (!logs || logs.length === 0) {
+          win.innerHTML = '<div class="log-row"><span class="log-time">[System]</span> 暂无日志输出</div>';
+          return;
+        }
+
+        let html = '';
+        logs.forEach(log => {
+          let textClass = '';
+          const t = log.text;
+          if (t.includes('成功') || t.includes('完成') || t.includes('200 OK')) textClass = 'log-text-success';
+          else if (t.includes('警告') || t.includes('等待') || t.includes('Retry')) textClass = 'log-text-warn';
+          else if (t.includes('失败') || t.includes('错误') || t.includes('异常') || t.includes('Error')) textClass = 'log-text-error';
+          else if (t.includes('[Dashboard]') || t.includes('[System]')) textClass = 'log-text-info';
+
+          html += `
+            <div class="log-row">
+              <span class="log-time">${escapeHtml(log.time)}</span>
+              <span class="${textClass}">${escapeHtml(log.text)}</span>
+            </div>
+          `;
+        });
+        win.innerHTML = html;
+
+        if (document.getElementById('autoScrollCheck').checked) {
+          win.scrollTop = win.scrollHeight;
+        }
+      } catch (e) {
+        console.error('拉取日志出错:', e);
+      }
+    }
+
+    function clearLogsView() {
+      document.getElementById('terminalWindow').innerHTML = '<div class="log-row"><span class="log-time">[System]</span> 日志视图已清空</div>';
+    }
+
+    // --- 调度器状态监控 ---
+    async function loadStatus() {
+      try {
+        const res = await fetch('/api/status');
         const data = await res.json();
 
-        if (data.success && data.uuid) {
-          box.innerHTML = `<img src="${data.qr_url}" alt="微信授权二维码">`;
-          statusText.textContent = '请使用微信扫码';
-          subText.textContent = '已捕获 UUID，等待扫码回调...';
+        document.getElementById('serverTimeText').textContent = data.server_time || '--:--:--';
 
-          // 开启轮询
-          pollTimer = setInterval(async () => {
-            try {
-              const checkRes = await fetch(`/api/auth/poll-qr?uuid=${encodeURIComponent(data.uuid)}&name=${encodeURIComponent(name)}`);
-              const checkData = await checkRes.json();
-
-              statusText.textContent = checkData.message;
-
-              if (checkData.status === 'success') {
-                clearInterval(pollTimer);
-                statusText.style.color = '#10b981';
-                subText.textContent = '3 秒后自动关闭窗口并刷新状态';
-                setTimeout(() => {
-                  closeQrModal();
-                  loadUsers();
-                }, 3000);
-              } else if (checkData.status === 'scanned') {
-                statusText.style.color = '#3b82f6';
-              } else if (checkData.status === 'expired' || checkData.status === 'error') {
-                clearInterval(pollTimer);
-                statusText.style.color = '#ef4444';
-              }
-            } catch (err) {
-              console.error(err);
-            }
-          }, 3000);
-
-        } else {
-          box.innerHTML = '<span style="color: #ef4444;">获取二维码失败</span>';
-          statusText.textContent = data.detail || '接口异常';
-        }
-      } catch (err) {
-        box.innerHTML = '<span style="color: #ef4444;">网络请求出错</span>';
-        statusText.textContent = err.message;
-      }
-    }
-
-    function closeQrModal() {
-      if (pollTimer) clearInterval(pollTimer);
-      document.getElementById('qrModal').classList.remove('open');
-      document.getElementById('qrStatusText').style.color = '#fff';
-    }
-
-    // 立即单人打卡
-    async function punchUser(name) {
-      if (!confirm(`确定要立即为【${name}】触发一次打卡吗？`)) return;
-      try {
-        const res = await fetch(`/api/punch/${encodeURIComponent(name)}`, { method: 'POST' });
-        const ret = await res.json();
-        alert(ret.message || '任务已触发');
-        setTimeout(loadLogs, 1500);
-      } catch (e) {
-        alert('触发失败: ' + e);
-      }
-    }
-
-    // 全员打卡
-    async function punchAllUsers() {
-      if (!confirm('确定要立即触发全员打卡任务吗？')) return;
-      try {
-        const res = await fetch('/api/punch-all', { method: 'POST' });
-        const ret = await res.json();
-        alert(ret.message || '全员打卡已在后台运行');
-        setTimeout(loadLogs, 1500);
-      } catch (e) {
-        alert('触发失败: ' + e);
-      }
-    }
-
-    // 删除用户
-    async function deleteUser(name) {
-      if (!confirm(`确定要彻底删除用户【${name}】的配置文件吗？`)) return;
-      try {
-        const res = await fetch(`/api/users/${encodeURIComponent(name)}`, { method: 'DELETE' });
-        const ret = await res.json();
-        if (ret.success) {
-          loadUsers();
-          loadStatus();
+        if (data.tasks && data.tasks.length > 0) {
+          const t0 = data.tasks[0];
+          document.getElementById('nextRunTimeText').textContent = t0.next_run_time || '今日已就绪';
+          document.getElementById('schedDetailText').textContent = `模块: ${t0.module} | 频率: 每${t0.frequency_days}天 | 启动时间: ${t0.start_time}`;
         }
       } catch (e) {
-        alert('删除失败: ' + e);
+        console.error('加载状态失败:', e);
       }
     }
 
-    // 模态框控制
-    function openAddUserModal() {
-      document.getElementById('userModalTitle').textContent = '添加用户配置';
-      document.getElementById('userForm').reset();
-      document.getElementById('inputName').removeAttribute('readonly');
-      document.getElementById('userModal').classList.add('open');
-    }
-
-    function editUser(u) {
-      document.getElementById('userModalTitle').textContent = '编辑用户配置 - ' + u.name;
-      document.getElementById('inputName').value = u.name;
-      document.getElementById('inputName').setAttribute('readonly', 'true');
-      document.getElementById('inputEmail').value = u.email;
-      document.getElementById('inputThreadId').value = u.thread_id;
-      document.getElementById('inputLocText').value = u.location_text;
-      document.getElementById('inputLat').value = u.latitude;
-      document.getElementById('inputLng').value = u.longitude;
-      document.getElementById('userModal').classList.add('open');
-    }
-
-    function closeUserModal() {
-      document.getElementById('userModal').classList.remove('open');
+    function showSaveTip(text, color) {
+      const tip = document.getElementById('saveStatusTip');
+      tip.textContent = text;
+      tip.style.color = color || '#10b981';
+      setTimeout(() => { tip.textContent = ''; }, 6000);
     }
 
     function escapeHtml(str) {
-      return (str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      return (str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     }
-
-    // 初始化加载与定时刷新
-    loadAllData();
-    setInterval(loadStatus, 10000);
-    setInterval(loadLogs, 6000);
   </script>
 </body>
 </html>

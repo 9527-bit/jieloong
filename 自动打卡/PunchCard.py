@@ -300,14 +300,8 @@ class PunchCard:
             if Token is None:
                 # 最终失败处理（对应原函数次日12:05逻辑）
                 自动打卡.Sendmail.Sendmail().sendEndlMail(self.Email, self.Name)
-                # 删除该用户的配置文件
-                import os
-                try:
-                    os.remove(f"自动打卡/Tokens/{self.Name}.json")
-                except Exception as e:
-                    print(f"[{datetime.now().strftime('%Y-%m-%d  %H:%M:%S')}] {self.Name}: 删除配置文件失败: {e}")
                 print(
-                    f"[{datetime.now().strftime('%Y-%m-%d  %H:%M:%S')}] {self.Name}: 重新获取Token失败，自动打卡服务终止"
+                    f"[{datetime.now().strftime('%Y-%m-%d  %H:%M:%S')}] {self.Name}: Token获取失败或已失效，保留用户配置，请在 Web 控制台重新扫码授权登录"
                 )
                 return False
 
