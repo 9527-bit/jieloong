@@ -1,12 +1,19 @@
 import json
+import random
 import threading
-from datetime import datetime  # 新增datetime模块导入
+import time
+from datetime import datetime
 
 import 自动打卡.PunchCard
 
 
-def run_punch_card(name):
+def run_punch_card(name, delay_seconds=0):
     try:
+        if delay_seconds > 0:
+            print(
+                f"[{datetime.now().strftime('%Y-%m-%d  %H:%M:%S')}] {name}: 模拟真实错峰打卡，随机等待 {delay_seconds} 秒后开始..."
+            )
+            time.sleep(delay_seconds)
         # 输出线程开始的日志
         print(
             f"[{datetime.now().strftime('%Y-%m-%d  %H:%M:%S')}] {name}: 线程开始执行打卡操作"
@@ -39,9 +46,9 @@ def main():
             )
             return
         
-        # 获取所有.json文件（排除模版文件 example.json）
+        # 获取所有.json文件（排除模版文件 example.json 和点开头的隐藏文件）
         json_files = [
-            f for f in os.listdir(tokens_dir)
+            f for f in sorted(os.listdir(tokens_dir))
             if f.endswith('.json') and f != 'example.json' and not f.startswith('.')
         ]
         
@@ -52,11 +59,11 @@ def main():
             return
         
         threads = []
-        # 为每个用户创建一个线程
-        for json_file in json_files:
-            # 去掉.json后缀得到用户名
+        # 为每个用户创建一个线程，错开随机秒数（模拟多用户陆续操作，避免同一秒并发触发风控）
+        for idx, json_file in enumerate(json_files):
             name = json_file[:-5]
-            thread = threading.Thread(target=run_punch_card, args=(name,))
+            stagger = random.randint(2, 10) + (idx * random.randint(5, 18))
+            thread = threading.Thread(target=run_punch_card, args=(name, stagger))
             threads.append(thread)
             thread.start()
 

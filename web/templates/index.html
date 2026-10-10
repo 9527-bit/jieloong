@@ -826,18 +826,7 @@
         <span style="color: rgba(255,255,255,0.2);">➔</span>
         <div class="ribbon-step"><span class="num">4</span> 每天自动定时打卡</div>
       </div>
-      <div class="ribbon-tag" id="userIsolationBadge"> 独立会话隔离</div>
-    </div>
-
-    <!-- 用户切换与隔离工具条 -->
-    <div id="userSwitcherBar" style="display: none; margin-bottom: 1.5rem; padding: 0.85rem 1.25rem; background: var(--glass-surface); backdrop-filter: var(--blur-val); border: 1px solid var(--glass-border); border-radius: 18px; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap;">
-      <div style="display: flex; align-items: center; gap: 0.65rem; flex-wrap: wrap;">
-        <span style="font-size: 0.88rem; font-weight: 600; color: #94a3b8;">👥 系统已存打卡配置:</span>
-        <div id="userChipsContainer" style="display: flex; gap: 0.45rem; flex-wrap: wrap;"></div>
-      </div>
-      <div style="display: flex; gap: 0.6rem; align-items: center;">
-        <button class="btn btn-outline btn-sm" onclick="handleNewUserClick()" style="font-size: 0.82rem; padding: 0.35rem 0.85rem;">➕ 录入新打卡人</button>
-      </div>
+      <div class="ribbon-tag" id="userIsolationBadge"> 个人打卡工作站</div>
     </div>
 
     <!-- STEP 1: 微信扫码授权 -->
@@ -1068,7 +1057,7 @@
       </div>
 
       <div class="scheduler-bar">
-        <div>🕒 调度状态: <strong id="schedDetailText" style="color: #fff;">每天定时执行</strong></div>
+        <div>🕒 调度状态: <strong id="schedDetailText" style="color: #fff;">每天随机定时打卡</strong></div>
         <div>下一次触发时间: <strong id="nextRunTimeText" style="color: var(--apple-blue);">--</strong></div>
       </div>
     </section>
@@ -1114,67 +1103,6 @@
       setInterval(loadLogs, 5000);
     });
 
-    // --- 渲染系统已有用户切换条 ---
-    function renderUserSwitcher(allUsers, currentUser) {
-      const bar = document.getElementById('userSwitcherBar');
-      const container = document.getElementById('userChipsContainer');
-      if (!bar || !container) return;
-
-      if (!allUsers || allUsers.length === 0) {
-        bar.style.display = 'none';
-        return;
-      }
-
-      bar.style.display = 'flex';
-      let html = '';
-      allUsers.forEach(uname => {
-        const isActive = uname === currentUser;
-        html += `
-          <span class="roster-chip ${isActive ? 'active' : ''}" style="font-size: 0.82rem; padding: 0.25rem 0.75rem;" onclick="handleSwitchUser('${escapeHtml(uname)}')">
-            👤 ${escapeHtml(uname)} ${isActive ? '✓' : ''}
-          </span>
-        `;
-      });
-      container.innerHTML = html;
-    }
-
-    // --- 切换至指定已有用户 ---
-    async function handleSwitchUser(name) {
-      try {
-        const res = await apiFetch('/api/session/switch-user', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name })
-        });
-        const ret = await res.json();
-        if (ret.success) {
-          showSaveTip(`已将会话切换至用户【${name}】`, '#30D158');
-          await loadAppConfig();
-        } else {
-          alert(ret.detail || '切换用户失败');
-        }
-      } catch (e) {
-        alert('切换用户异常: ' + e);
-      }
-    }
-
-    // --- 准备录入新用户 ---
-    async function handleNewUserClick() {
-      if (!confirm('确定要切换为录入新用户吗？这不会影响已有用户的配置和定时打卡。')) return;
-      try {
-        await apiFetch('/api/session/new-user', { method: 'POST' });
-        document.getElementById('configName').value = '';
-        document.getElementById('configEmail').value = '';
-        document.getElementById('configThreadId').value = '';
-        document.getElementById('configLocationText').value = '';
-        document.getElementById('currentUserNameText').textContent = '未绑定';
-        showSaveTip('已进入新用户录入模式，请扫码授权并设置打卡信息', '#93c5fd');
-        await loadAppConfig();
-      } catch (e) {
-        alert('操作异常: ' + e);
-      }
-    }
-
     // --- 加载当前会话用户配置与登录状态 ---
     async function loadAppConfig() {
       try {
@@ -1188,9 +1116,6 @@
         // 更新顶部会话用户名
         const currentName = data.name || (data.has_config ? data.name : '未绑定');
         document.getElementById('currentUserNameText').textContent = currentName;
-
-        // 渲染系统已有用户切换列表
-        renderUserSwitcher(data.all_users || [], data.name || '');
 
         if (data.logged_in) {
           showLoggedView(data.token_preview);
@@ -1635,7 +1560,7 @@
         if (data.tasks && data.tasks.length > 0) {
           const t0 = data.tasks[0];
           document.getElementById('nextRunTimeText').textContent = t0.next_run_time || '今日已就绪';
-          document.getElementById('schedDetailText').textContent = `模块: ${t0.module} | 频率: 每${t0.frequency_days}天 | 启动时间: ${t0.start_time}`;
+          document.getElementById('schedDetailText').textContent = `模块: ${t0.module} | 频率: 每${t0.frequency_days}天 | 随机定时打卡 (模拟人工)`;
         }
       } catch (e) {
         console.error('加载状态失败:', e);

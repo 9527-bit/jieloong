@@ -207,7 +207,6 @@ async def get_config(request: Request):
         "latitude": 23.099994,
         "longitude": 113.324520,
         "token_preview": (token[:10] + "...") if token else "",
-        "all_users": all_users,
     }
 
     if uf and os.path.exists(uf):
@@ -496,7 +495,6 @@ async def get_status(request: Request):
         "logged_in": bool(token),
         "user_name": user_name,
         "total_users": len(all_users),
-        "all_users": all_users,
         "tasks": tasks_info,
         "config_modules": TaskManager.TaskManager.module_names,
     }

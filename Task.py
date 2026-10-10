@@ -1,6 +1,7 @@
 import datetime
-import TaskManager
 import json
+import random
+import TaskManager
 
 
 # 定义一个任务模版类，它是所有任务类的父类
@@ -8,48 +9,57 @@ class Task:
 
     def updata_next_run_time(self):
         """
-        更新下次任务执行时间
+        更新下次任务执行时间（支持随机浮动，模拟真实人工打卡）
         """
-
-        now_time = datetime.datetime.now()  # 获取当前时间
-        if now_time < datetime.datetime(
-            now_time.year,
-            now_time.month,
-            now_time.day,
+        now_time = datetime.datetime.now()
+        target_date = now_time.date()
+        base_time = datetime.datetime(
+            target_date.year,
+            target_date.month,
+            target_date.day,
             self.start_time.hour,
             self.start_time.minute,
-        ):  # 如果当前时间小于任务开始执行时间就将下次任务执行时间设置为当天
-            return datetime.datetime(
-                now_time.year,
-                now_time.month,
-                now_time.day,
+        )
+
+        # 随机浮动秒数 (0 ~ random_jitter_minutes 分钟 + 0 ~ 59 秒)
+        jitter_seconds = 0
+        if getattr(self, "random_jitter_minutes", 0) > 0:
+            jitter_seconds = random.randint(0, self.random_jitter_minutes * 60) + random.randint(0, 59)
+
+        candidate_time = base_time + datetime.timedelta(seconds=jitter_seconds)
+
+        # 如果今天的随机时间已经过去了，计算下一个周期（通常是明天）的随机时间
+        if candidate_time <= now_time:
+            next_date = target_date + datetime.timedelta(days=self.frequency)
+            next_base_time = datetime.datetime(
+                next_date.year,
+                next_date.month,
+                next_date.day,
                 self.start_time.hour,
                 self.start_time.minute,
             )
+            next_jitter = 0
+            if getattr(self, "random_jitter_minutes", 0) > 0:
+                next_jitter = random.randint(0, self.random_jitter_minutes * 60) + random.randint(0, 59)
+            candidate_time = next_base_time + datetime.timedelta(seconds=next_jitter)
 
-        else:  # 否则为下次任务执行时间
-            return datetime.datetime(
-                now_time.year,
-                now_time.month,
-                now_time.day,
-                self.start_time.hour,
-                self.start_time.minute,
-            ) + datetime.timedelta(days=self.frequency)
+        return candidate_time
 
-    def __init__(self, Name, name, frequency, hour, minute, IsDisposable=False):
+    def __init__(self, Name, name, frequency, hour, minute, IsDisposable=False, random_jitter_minutes=35):
         """
         初始化任务类
+        :param random_jitter_minutes: 随机延后浮动范围（分钟），默认 35 分钟
         """
         self.Name = Name  # 任务对象的类名(模块名)
         self.name = name  # 任务名称
         self.frequency = frequency  # 任务频率，几天执行一次
-        self.start_time = datetime.time(hour, minute)  # 任务开始执行时间,格式：时，分
+        self.start_time = datetime.time(hour, minute)  # 任务基准开始执行时间
+        self.random_jitter_minutes = random_jitter_minutes  # 随机浮动分钟
         self.count = 0  # 任务总执行次数
-        self.next_run_time = self.updata_next_run_time()  # 获取任务下次执行时间
         self.IsDisposable = IsDisposable  # 是否为一次性任务
+        self.next_run_time = self.updata_next_run_time()  # 获取任务下次执行时间
         print(
-            datetime.datetime.now(),
-            "%s任务对象构建完成，下次执行时间：%s" % (self.name, self.next_run_time),
+            f"[{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {self.name}任务构建完成，基准时间: {self.start_time.strftime('%H:%M')} (浮动范围: +{self.random_jitter_minutes}分钟)，下一次随机执行时间: {self.next_run_time.strftime('%Y-%m-%d %H:%M:%S')}"
         )
 
         TaskManager.TaskManager.task_group.append(self)  # 向任务管理器添加当前任务对象
@@ -99,9 +109,9 @@ class Task:
         self.run()  # 子类方法
         print("\n")
 
-        print(datetime.datetime.now(), "当前任务执行完成！")
-        self.next_run_time = self.updata_next_run_time()  # 更新任务下次执行时间
-        print(datetime.datetime.now(), "任务下次执行时间：%s" % self.next_run_time)
+        print(f"[{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] 当前任务执行完成！")
+        self.next_run_time = self.updata_next_run_time()  # 更新任务下次执行时间（重新生成随机时间）
+        print(f"[{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] 【{self.name}】已自动生成下次随机定时执行时间: {self.next_run_time.strftime('%Y-%m-%d %H:%M:%S')}")
         print(
             "==============================执行完成=================================="
         )
