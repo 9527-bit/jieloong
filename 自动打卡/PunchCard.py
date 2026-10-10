@@ -101,19 +101,15 @@ class PunchCard:
                 f"[{datetime.now().strftime('%Y-%m-%d  %H:%M:%S')}] {self.Name}: 开始构建请求体"
             )
             self.UpdataToken()
-            self.url = "https://i-api.jielong.com/api/CheckIn/EditRecord"
+            self.url = "https://api.jielong.com/api/CheckIn/EditRecord"
             self.payload = json.dumps({
-                "Id":
-                0,
-                "ThreadId":
-                self.ThreadId,
-                "Number":
-                "",
-                "Signature":
-                self.Name,
+                "Id": 0,
+                "EditToken": "",
+                "ThreadId": self.ThreadId,
+                "Number": "",
+                "Signature": self.Name,
                 "RecordValues": [{
-                    "FieldId":
-                    1,
+                    "FieldId": 1,
                     "Values": [
                         self.Location["coordinates"]
                     ],
@@ -124,25 +120,24 @@ class PunchCard:
                     "CustomTableValues": [],
                     "FillInMatrixFieldValues": [],
                     "MatrixFormValues": [],
-                    "HasValue":
-                    True,
+                    "HasValue": True,
                 }],
-                "DateTarget":
-                "",
-                "IsNeedManualAudit":
-                False,
-                "MinuteTarget":
-                -1,
-                "IsNameNumberComfirm":
-                False,
+                "DateTarget": "",
+                "IsNeedManualAudit": False,
+                "MinuteTarget": -1,
+                "IsNameNumberComfirm": False,
             })
             self.headers = {
-                "Authorization": "Bearer %s" % self.Token,
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.6261.95 Safari/537.36",
-                "Content-Type": "application/json",
-                "Accept": "*/*",
-                "Host": "i-api.jielong.com",
+                "Host": "api.jielong.com",
                 "Connection": "keep-alive",
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {self.Token}",
+                "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 16_5_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 MicroMessenger/8.0.71(0x18004730) NetType/4G Language/zh_CN",
+                "Referer": "https://servicewechat.com/wx36ddf2a92cbb7814/914/page-frame.html",
+                "X-Api-Request-Referer": "https://servicewechat.com/wx36ddf2a92cbb7814",
+                "X-Api-Request-Mode": "cors",
+                "PlatForm": "wx",
+                "app-version": "v8.14.0.1",
             }
             # 输出构建请求体完成的日志
             print(
@@ -356,12 +351,14 @@ class PunchCard:
             if resp_json:
                 desc = str(resp_json.get("Description", ""))
                 data_val = str(resp_json.get("Data", ""))
-                if "打卡成功" in desc or "打卡成功" in data_val or "成功" in desc:
+                type_code = str(resp_json.get("Type", ""))
+                if ("打卡成功" in desc or "打卡成功" in data_val or "成功" in desc or
+                    "已完成当期打卡" in desc or "已完成当期打卡" in data_val or type_code in ["000001", "000020"]):
                     is_success = True
 
             if is_success:
                 print(
-                    f"[{datetime.now().strftime('%Y-%m-%d  %H:%M:%S')}] {self.Name}: 打卡成功！"
+                    f"[{datetime.now().strftime('%Y-%m-%d  %H:%M:%S')}] {self.Name}: 打卡成功！({resp_json.get('Data', '成功')})"
                 )
                 自动打卡.Sendmail.Sendmail().sendSucceedMail(self.Email, self.Name)
             else:
@@ -384,12 +381,14 @@ class PunchCard:
                     if resp_json:
                         desc = str(resp_json.get("Description", ""))
                         data_val = str(resp_json.get("Data", ""))
-                        if "打卡成功" in desc or "打卡成功" in data_val or "成功" in desc:
+                        type_code = str(resp_json.get("Type", ""))
+                        if ("打卡成功" in desc or "打卡成功" in data_val or "成功" in desc or
+                            "已完成当期打卡" in desc or "已完成当期打卡" in data_val or type_code in ["000001", "000020"]):
                             retry_success = True
 
                     if retry_success:
                         print(
-                            f"[{datetime.now().strftime('%Y-%m-%d  %H:%M:%S')}] {self.Name}: 重试打卡成功！"
+                            f"[{datetime.now().strftime('%Y-%m-%d  %H:%M:%S')}] {self.Name}: 重试打卡成功！({resp_json.get('Data', '成功')})"
                         )
                         自动打卡.Sendmail.Sendmail().sendSucceedMail(
                             self.Email, self.Name)
