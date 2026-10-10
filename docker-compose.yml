@@ -1,0 +1,20 @@
+version: '3.8'
+
+services:
+  taskforge:
+    build: .
+    container_name: taskforge-app
+    restart: unless-stopped
+    ports:
+      # 映射 18080 端口 (符合 18000-18999 端口范围要求)
+      - "18080:18080"
+    environment:
+      - PORT=18080
+      - HOST=0.0.0.0
+      - TZ=Asia/Shanghai
+      - SMTP_SENDER=${SMTP_SENDER:-your_email@qq.com}
+      - SMTP_PASSWORD=${SMTP_PASSWORD:-your_auth_code}
+    volumes:
+      # 持久化用户配置文件与任务配置
+      - ./自动打卡/Tokens:/app/自动打卡/Tokens
+      - ./config.json:/app/config.json

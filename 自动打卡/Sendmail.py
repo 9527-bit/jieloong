@@ -1,3 +1,4 @@
+import os
 from datetime import datetime
 import smtplib
 from email.mime.text import MIMEText
@@ -6,10 +7,10 @@ from email.mime.text import MIMEText
 # 第二步，发送邮件
 class Sendmail:
     def __init__(self):
-        # 发件人
-        self.sender = "your_email@qq.com"
-        # 授权码（非密码）
-        self.password = "your_auth_code"
+        # 发件人（优先从环境变量读取）
+        self.sender = os.environ.get("SMTP_SENDER", "your_email@qq.com")
+        # 授权码（非密码，优先从环境变量读取）
+        self.password = os.environ.get("SMTP_PASSWORD", "your_auth_code")
 
     def send_email(self, Class, html_content, subject, receiver, log_prefix):
         """

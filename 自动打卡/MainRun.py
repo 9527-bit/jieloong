@@ -39,12 +39,15 @@ def main():
             )
             return
         
-        # 获取所有.json文件
-        json_files = [f for f in os.listdir(tokens_dir) if f.endswith('.json')]
+        # 获取所有.json文件（排除模版文件 example.json）
+        json_files = [
+            f for f in os.listdir(tokens_dir)
+            if f.endswith('.json') and f != 'example.json'
+        ]
         
         if not json_files:
             print(
-                f"[{datetime.now().strftime('%Y-%m-%d  %H:%M:%S')}] Tokens目录下没有找到任何配置文件"
+                f"[{datetime.now().strftime('%Y-%m-%d  %H:%M:%S')}] Tokens目录下没有找到有效的用户配置文件（请在Tokens目录下创建 [用户名].json）"
             )
             return
         
@@ -58,8 +61,8 @@ def main():
             thread.start()
 
         # 等待所有线程完成
-        # for thread in threads:
-        # thread.join()
+        for thread in threads:
+            thread.join()
 
     except FileNotFoundError as e:
         # 输出文件未找到的异常日志
