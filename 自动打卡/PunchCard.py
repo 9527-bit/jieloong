@@ -323,9 +323,26 @@ class PunchCard:
             print(
                 f"[{datetime.now().strftime('%Y-%m-%d  %H:%M:%S')}] {self.Name}: 开始执行打卡主流程"
             )
+            config_data = self.RJson()
+            if config_data.get("Status") == "paused":
+                print(
+                    f"[{datetime.now().strftime('%Y-%m-%d  %H:%M:%S')}] ⏸️ {self.Name}: 当前打卡配置处于【已暂停】状态 (原因: {config_data.get('LastError', '多次打卡失败')})，跳过执行，等待用户更新配置。"
+                )
+                return
+
             if self.Token == "":  # JSON文件内的Token如果为空则先获取Token
                 isRun = (self.DuplicateToken())  # 最终还是未获取到Token，则直接退出整个程序
                 if isRun == False:
+                    fail_cnt = config_data.get("FailCount", 0) + 1
+                    config_data["FailCount"] = fail_cnt
+                    config_data["LastError"] = "微信授权Token已失效且未能自动刷新"
+                    config_data["LastFailTime"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    if fail_cnt >= 3:
+                        config_data["Status"] = "paused"
+                        print(
+                            f"[{datetime.now().strftime('%Y-%m-%d  %H:%M:%S')}] ⚠️ {self.Name}: 连续失败达 {fail_cnt} 次，已自动暂停打卡，等待用户在 Web 页面重新扫码！"
+                        )
+                    self.WJson(config_data)
                     return
 
             response = self.RTS()
@@ -342,6 +359,7 @@ class PunchCard:
                     )
 
             is_success = False
+            desc = ""
             if resp_json:
                 desc = str(resp_json.get("Description", ""))
                 data_val = str(resp_json.get("Data", ""))
@@ -354,11 +372,17 @@ class PunchCard:
                 print(
                     f"[{datetime.now().strftime('%Y-%m-%d  %H:%M:%S')}] {self.Name}: 打卡成功！({resp_json.get('Data', '成功')})"
                 )
+                config_data["Status"] = "active"
+                config_data["FailCount"] = 0
+                config_data["LastError"] = ""
+                config_data["LastSuccessTime"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                self.WJson(config_data)
                 自动打卡.Sendmail.Sendmail().sendSucceedMail(self.Email, self.Name)
             else:
                 print(
-                    f"[{datetime.now().strftime('%Y-%m-%d  %H:%M:%S')}] {self.Name}: 首次打卡响应异常，尝试刷新Token后重试..."
+                    f"[{datetime.now().strftime('%Y-%m-%d  %H:%M:%S')}] {self.Name}: 首次打卡响应异常 ({desc})，尝试刷新Token后重试..."
                 )
+                retry_success = False
                 if self.DuplicateToken():
                     response = self.RTS()
                     resp_json = None
@@ -371,7 +395,6 @@ class PunchCard:
                         except Exception:
                             pass
                     
-                    retry_success = False
                     if resp_json:
                         desc = str(resp_json.get("Description", ""))
                         data_val = str(resp_json.get("Data", ""))
@@ -380,18 +403,36 @@ class PunchCard:
                             "已完成当期打卡" in desc or "已完成当期打卡" in data_val or type_code in ["000001", "000020"]):
                             retry_success = True
 
-                    if retry_success:
+                if retry_success:
+                    print(
+                        f"[{datetime.now().strftime('%Y-%m-%d  %H:%M:%S')}] {self.Name}: 重试打卡成功！({resp_json.get('Data', '成功')})"
+                    )
+                    config_data["Status"] = "active"
+                    config_data["FailCount"] = 0
+                    config_data["LastError"] = ""
+                    config_data["LastSuccessTime"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    self.WJson(config_data)
+                    自动打卡.Sendmail.Sendmail().sendSucceedMail(
+                        self.Email, self.Name)
+                else:
+                    err_msg = desc or (resp_json.get("Data") if resp_json else "网络或服务器错误")
+                    print(
+                        f"[{datetime.now().strftime('%Y-%m-%d  %H:%M:%S')}] {self.Name}: 打卡失败: {err_msg}"
+                    )
+                    fail_cnt = config_data.get("FailCount", 0) + 1
+                    config_data["FailCount"] = fail_cnt
+                    config_data["LastError"] = str(err_msg)
+                    config_data["LastFailTime"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+                    # 连续失败达 3 次，或遇到明确的Token失效/未登录等不可自愈错误，自动熔断暂停
+                    if fail_cnt >= 3 or any(w in str(err_msg) for w in ["登录", "Token", "失效", "过期", "401"]):
+                        config_data["Status"] = "paused"
                         print(
-                            f"[{datetime.now().strftime('%Y-%m-%d  %H:%M:%S')}] {self.Name}: 重试打卡成功！({resp_json.get('Data', '成功')})"
+                            f"[{datetime.now().strftime('%Y-%m-%d  %H:%M:%S')}] ⚠️ {self.Name}: 连续打卡失败已达 {fail_cnt} 次（{err_msg}），系统已自动将该配置设为【暂停】状态，停止后续打卡，等待用户在 Web 页面更新！"
                         )
-                        自动打卡.Sendmail.Sendmail().sendSucceedMail(
-                            self.Email, self.Name)
-                    else:
-                        print(
-                            f"[{datetime.now().strftime('%Y-%m-%d  %H:%M:%S')}] {self.Name}: 打卡失败: {resp_json}"
-                        )
-                        自动打卡.Sendmail.Sendmail().sendFailMail(
-                            self.Email, self.Name)
+                    self.WJson(config_data)
+                    自动打卡.Sendmail.Sendmail().sendFailMail(
+                        self.Email, self.Name)
             # 输出主流程完成的日志
             print(
                 f"[{datetime.now().strftime('%Y-%m-%d  %H:%M:%S')}] {self.Name}: 打卡主流程执行完成"
@@ -406,3 +447,17 @@ class PunchCard:
             print(
                 f"[{datetime.now().strftime('%Y-%m-%d  %H:%M:%S')}] {self.Name}: 执行打卡主流程时出现异常: {e}"
             )
+            try:
+                config_data = self.RJson()
+                fail_cnt = config_data.get("FailCount", 0) + 1
+                config_data["FailCount"] = fail_cnt
+                config_data["LastError"] = f"执行异常: {str(e)[:100]}"
+                config_data["LastFailTime"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                if fail_cnt >= 3:
+                    config_data["Status"] = "paused"
+                    print(
+                        f"[{datetime.now().strftime('%Y-%m-%d  %H:%M:%S')}] ⚠️ {self.Name}: 连续异常达 {fail_cnt} 次，系统已自动暂停该配置！"
+                    )
+                self.WJson(config_data)
+            except Exception:
+                pass

@@ -59,9 +59,31 @@ def main():
             return
         
         threads = []
-        # 为每个用户创建一个线程，错开随机秒数（模拟多用户陆续操作，避免同一秒并发触发风控）
-        for idx, json_file in enumerate(json_files):
+        active_users = []
+        # 检查各用户状态，已暂停的用户跳过调度
+        for json_file in json_files:
             name = json_file[:-5]
+            fpath = os.path.join(tokens_dir, json_file)
+            try:
+                with open(fpath, "r", encoding="utf-8") as fp:
+                    u_data = json.load(fp)
+                if u_data.get("Status") == "paused":
+                    print(
+                        f"[{datetime.now().strftime('%Y-%m-%d  %H:%M:%S')}] ⏸️ {name}: 配置已处于【暂停打卡】状态 (原因: {u_data.get('LastError', '多次失败')})，跳过今日定时打卡，等待用户更新"
+                    )
+                    continue
+            except Exception:
+                pass
+            active_users.append(name)
+
+        if not active_users:
+            print(
+                f"[{datetime.now().strftime('%Y-%m-%d  %H:%M:%S')}] 当前所有用户均处于暂停状态或未配置，跳过本次调度"
+            )
+            return
+
+        # 为正常状态的用户创建线程，错开随机秒数（模拟多用户陆续操作）
+        for idx, name in enumerate(active_users):
             stagger = random.randint(2, 10) + (idx * random.randint(5, 18))
             thread = threading.Thread(target=run_punch_card, args=(name, stagger))
             threads.append(thread)

@@ -74,12 +74,27 @@ def main():
         token_status = "✅ 已配置 (" + token[:10] + "...)" if token else "❌ 未配置或已失效"
         email_status = email if email else "（未配置通知邮箱）"
 
+        status_val = data.get("Status", "active")
+        fail_cnt = data.get("FailCount", 0)
+        last_err = data.get("LastError", "")
+        last_success = data.get("LastSuccessTime", "无记录")
+        last_fail = data.get("LastFailTime", "无记录")
+
+        if status_val == "paused":
+            run_status = f"⏸️ 已自动暂停打卡 (连续失败 {fail_cnt} 次: {last_err or 'Token失效或多次错误'})"
+        else:
+            run_status = "✅ 正常打卡 (active)"
+            if fail_cnt > 0:
+                run_status += f" [注意: 近期失败 {fail_cnt} 次: {last_err}]"
+
         print(f"【{idx}】打卡用户: {username}")
+        print(f"    • 调度运行状态       : {run_status}")
         print(f"    • 接龙编号 (ThreadId) : {thread_id}")
         print(f"    • 打卡地点名称       : {loc_text}")
         print(f"    • 坐标 (经度, 纬度)   : {lng}, {lat}")
         print(f"    • 微信 Token 凭证     : {token_status}")
         print(f"    • 提醒邮箱           : {email_status}")
+        print(f"    • 最近打卡记录       : 成功: {last_success} | 失败: {last_fail}")
         print(f"    • 配置文件路径       : 自动打卡/Tokens/{fname}")
         print(f"    • 最近配置修改时间   : {format_time(mtime)}")
         print("-" * 76)

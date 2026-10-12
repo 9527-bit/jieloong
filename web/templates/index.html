@@ -829,6 +829,18 @@
       <div class="ribbon-tag" id="userIsolationBadge"> 个人打卡工作站</div>
     </div>
 
+    <!-- 自动熔断暂停警告横幅 -->
+    <div id="pausedNoticeBanner" style="display: none; margin-bottom: 1.5rem; padding: 1.1rem 1.4rem; background: rgba(255, 69, 58, 0.12); border: 1px solid rgba(255, 69, 58, 0.35); border-radius: 18px; backdrop-filter: var(--blur-val); -webkit-backdrop-filter: var(--blur-val); box-shadow: var(--glass-specular);">
+      <div style="display: flex; align-items: center; gap: 0.65rem; font-weight: 700; font-size: 1rem; color: #ff6b6b; margin-bottom: 0.4rem;">
+        <span style="font-size: 1.25rem;">⚠️</span>
+        <span>自动打卡已暂停 (异常保护触发)</span>
+      </div>
+      <div id="pausedReasonText" style="font-size: 0.88rem; line-height: 1.6; color: #fca5a5;"></div>
+      <div style="margin-top: 0.65rem; font-size: 0.83rem; color: #cbd5e1;">
+        💡 <strong>恢复方法：</strong>请在下方重新扫码登录微信（或重新核对打卡地点与接龙），点击底部的<strong>【💾 保存打卡配置】</strong>，系统将自动重置错误并立即恢复定时打卡！
+      </div>
+    </div>
+
     <!-- STEP 1: 微信扫码授权 -->
     <section class="step-card" id="step1Card">
       <div class="step-header">
@@ -1115,7 +1127,15 @@
 
         // 更新顶部会话用户名
         const currentName = data.name || (data.has_config ? data.name : '未绑定');
-        document.getElementById('currentUserNameText').textContent = currentName;
+        // 检查打卡状态（若连续失败触发自动熔断，展示警告横幅）
+        const pausedBanner = document.getElementById('pausedNoticeBanner');
+        if (data.status === 'paused') {
+          pausedBanner.style.display = 'block';
+          const errDetail = data.last_error ? `（错误详情: <code>${escapeHtml(data.last_error)}</code>）` : '';
+          document.getElementById('pausedReasonText').innerHTML = `检测到该账号连续打卡失败 <strong>${data.fail_count || 1} 次</strong>${errDetail}。为防止平台风控与无效请求，系统已自动暂停每日定时打卡。`;
+        } else {
+          pausedBanner.style.display = 'none';
+        }
 
         if (data.logged_in) {
           showLoggedView(data.token_preview);

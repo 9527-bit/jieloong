@@ -1,6 +1,7 @@
 import collections
 from contextlib import asynccontextmanager
 import datetime
+import hashlib
 import json
 import os
 import re
@@ -9,6 +10,7 @@ import threading
 import time
 from typing import Any, Dict, List, Optional, Union
 import uuid
+import base64
 
 from fastapi import Body, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -159,6 +161,25 @@ def get_session_token(sess: Dict[str, Any]) -> str:
             pass
     return (sess.get("token") or "").strip()
 
+def get_wechat_user_id(token: str) -> str:
+    """从 Token 中提取微信账号唯一标识（JWT Payload 中的 UserId 或哈希指纹）"""
+    if not token or not isinstance(token, str):
+        return ""
+    token_str = token.strip()
+    parts = token_str.split(".")
+    if len(parts) >= 2:
+        try:
+            payload_b64 = parts[1]
+            payload_b64 += "=" * ((4 - len(payload_b64) % 4) % 4)
+            data = base64.urlsafe_b64decode(payload_b64.encode("ascii"))
+            payload = json.loads(data.decode("utf-8"))
+            for k in ["UserId", "userId", "nameid", "sub", "OpenId", "openid", "id"]:
+                if k in payload and payload[k]:
+                    return str(payload[k]).strip()
+        except Exception:
+            pass
+    return hashlib.sha256(token_str.encode("utf-8")).hexdigest()[:16]
+
 # --- Pydantic 模型 ---
 class SingleUserConfigModel(BaseModel):
     name: str
@@ -230,6 +251,9 @@ async def get_config(request: Request):
                 "location_text": loc.get("text", ""),
                 "latitude": coords.get("latitude", 23.099994),
                 "longitude": coords.get("longitude", 113.324520),
+                "status": data.get("Status", "active"),
+                "fail_count": data.get("FailCount", 0),
+                "last_error": data.get("LastError", ""),
             })
         except Exception as e:
             print(f"[Dashboard] 读取会话【{sid[:8]}】配置异常: {e}")
@@ -240,7 +264,7 @@ async def get_config(request: Request):
 
 @app.post("/api/config")
 async def save_config(request: Request, cfg: SingleUserConfigModel):
-    """保存用户打卡配置（隔离多用户，保存不覆盖其它用户文件）"""
+    """保存用户打卡配置（隔离多用户，保存不覆盖其它用户文件；绑定单微信单人打卡）"""
     sid = get_session_id(request)
     sess = get_session(sid)
 
@@ -251,12 +275,48 @@ async def save_config(request: Request, cfg: SingleUserConfigModel):
         raise HTTPException(status_code=400, detail="请选择或输入要打卡的接龙 ThreadId")
 
     token_to_use = cfg.token.strip() if cfg.token else get_session_token(sess)
+    current_wechat_id = get_wechat_user_id(token_to_use)
 
-    # 保存到对应用户的 JSON 文件（保留所有其它用户文件，保障多用户并存）
+    # 微信账号单人绑定防替签校验：一个微信在一个签到接龙中只能给一个人签到，不能替他人代签
+    if os.path.exists(TOKENS_DIR):
+        for fname in os.listdir(TOKENS_DIR):
+            if fname.endswith(".json") and fname != "example.json" and not fname.startswith("."):
+                other_uname = fname[:-5]
+                # 对比其它已有用户配置
+                if other_uname != clean_name:
+                    other_path = os.path.join(TOKENS_DIR, fname)
+                    try:
+                        with open(other_path, "r", encoding="utf-8") as fp:
+                            other_data = json.load(fp)
+                        other_thread_id = str(other_data.get("ThreadId", "")).strip()
+                        current_thread_id = str(cfg.thread_id).strip()
+                        other_token = (other_data.get("Token") or "").strip()
+                        other_wechat_id = other_data.get("WechatId") or get_wechat_user_id(other_token)
+
+                        # 如果同一接龙已绑定给同一个微信账号
+                        if other_thread_id == current_thread_id and current_thread_id != "0":
+                            is_same_wechat = False
+                            if current_wechat_id and other_wechat_id and current_wechat_id == other_wechat_id:
+                                is_same_wechat = True
+                            elif token_to_use and other_token and token_to_use == other_token:
+                                is_same_wechat = True
+
+                            if is_same_wechat:
+                                raise HTTPException(
+                                    status_code=400,
+                                    detail=f"【微信单人打卡绑定限制】该微信账号在当前接龙 (ID: {cfg.thread_id}) 中已绑定为【{other_uname}】打卡！接龙管家规定一个微信在同一个接龙里只能给一人打卡，不能替他人代签。"
+                                )
+                    except HTTPException:
+                        raise
+                    except Exception:
+                        pass
+
+    # 保存到对应用户的 JSON 文件（更新重置失败计数，恢复 active 正常状态）
     filepath = os.path.join(TOKENS_DIR, f"{clean_name}.json")
     content = {
         "Email": cfg.email.strip() if cfg.email else "",
         "Token": token_to_use,
+        "WechatId": current_wechat_id,
         "ThreadId": cfg.thread_id,
         "Location": {
             "coordinates": json.dumps({
@@ -264,7 +324,11 @@ async def save_config(request: Request, cfg: SingleUserConfigModel):
                 "longitude": cfg.longitude
             }),
             "text": cfg.location_text.strip()
-        }
+        },
+        "Status": "active",
+        "FailCount": 0,
+        "LastError": "",
+        "UpdatedAt": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     }
 
     with open(filepath, "w", encoding="utf-8") as f:
@@ -606,18 +670,46 @@ async def poll_qr_status(request: Request, uuid: str):
                 auth_worker = 自动打卡.WechatTokenWorkflow.GetAuthorization(wx_code)
                 token = auth_worker.getToken(f"WebAuth-{sid[:8]}")
                 if token:
-                    sess = update_session(sid, {"token": token})
-                    # 若该会话已绑定了用户文件，同步更新该文件的 Token
-                    if sess.get("user_name"):
-                        uf = os.path.join(TOKENS_DIR, f"{sess['user_name']}.json")
+                    scanned_wechat_id = get_wechat_user_id(token)
+                    matched_user = sess.get("user_name")
+
+                    # 若当前会话尚未绑定用户名，尝试根据 WechatId 或 Token 匹配系统中已有用户配置
+                    if not matched_user and os.path.exists(TOKENS_DIR):
+                        for fname in os.listdir(TOKENS_DIR):
+                            if fname.endswith(".json") and fname != "example.json" and not fname.startswith("."):
+                                fpath = os.path.join(TOKENS_DIR, fname)
+                                try:
+                                    with open(fpath, "r", encoding="utf-8") as fp:
+                                        udata = json.load(fp)
+                                    u_token = (udata.get("Token") or "").strip()
+                                    u_wechat_id = udata.get("WechatId") or get_wechat_user_id(u_token)
+                                    if (scanned_wechat_id and u_wechat_id and scanned_wechat_id == u_wechat_id) or (u_token and u_token == token):
+                                        matched_user = fname[:-5]
+                                        break
+                                except Exception:
+                                    pass
+
+                    sess_update = {"token": token}
+                    if matched_user:
+                        sess_update["user_name"] = matched_user
+                    sess = update_session(sid, sess_update)
+
+                    # 若已绑定或识别出用户文件，同步更新该文件的 Token、WechatId，并重置失败计数恢复打卡状态
+                    if matched_user:
+                        uf = os.path.join(TOKENS_DIR, f"{matched_user}.json")
                         if os.path.exists(uf):
                             try:
                                 with open(uf, "r", encoding="utf-8") as fp:
                                     udata = json.load(fp)
                                 udata["Token"] = token
+                                udata["WechatId"] = scanned_wechat_id
+                                udata["Status"] = "active"
+                                udata["FailCount"] = 0
+                                udata["LastError"] = ""
+                                udata["UpdatedAt"] = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                                 with open(uf, "w", encoding="utf-8") as fp:
                                     json.dump(udata, fp, indent=4, ensure_ascii=False)
-                                print(f"[WebAuth-{sid[:8]}] 同步更新用户【{sess['user_name']}】的 Token")
+                                print(f"[WebAuth-{sid[:8]}] 成功识别/关联用户【{matched_user}】，已同步更新 Token 并恢复正常打卡状态")
                             except Exception as e:
                                 print(f"[WebAuth] 同步更新用户文件失败: {e}")
 
@@ -696,7 +788,35 @@ async def delete_user(request: Request, name: str):
         return {"success": True, "message": f"已删除用户 {clean_name}"}
     raise HTTPException(status_code=404, detail="用户不存在")
 
-# --- 实时日志流 ---
+# --- 实时日志流（严格按用户会话隔离） ---
 @app.get("/api/logs")
-async def get_logs():
-    return list(log_capture.logs)
+async def get_logs(request: Request):
+    sid = get_session_id(request)
+    sess = get_session(sid)
+    current_user = (sess.get("user_name") or "").strip()
+    all_users = get_all_user_names()
+    other_users = [u for u in all_users if u != current_user]
+    sid_prefix = sid[:8] if sid else ""
+
+    filtered = []
+    for entry in log_capture.logs:
+        text = entry.get("text", "")
+        # 如果日志包含其他已注册用户的名字，且不包含当前用户自身名字，过滤排除
+        has_other_user = any(ou in text for ou in other_users)
+        if has_other_user and (not current_user or current_user not in text):
+            continue
+
+        # 如果是会话相关日志（包含 WebAuth- 或 会话【），仅匹配当前会话
+        if "WebAuth-" in text and sid_prefix and (f"WebAuth-{sid_prefix}" not in text):
+            continue
+        if "会话【" in text and sid_prefix and (f"会话【{sid_prefix}" not in text):
+            continue
+
+        # 未绑定打卡人的访问者，不能看到任何具体用户的打卡执行详情
+        if not current_user:
+            if any(u in text for u in all_users):
+                continue
+
+        filtered.append(entry)
+
+    return filtered
